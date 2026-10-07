@@ -1,0 +1,44 @@
+# Frontend dependencies and build artifacts
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+
+# Python virtual environments, bytecode, and test/tool caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local environment configuration and credentials
+.env
+.env.*
+.aws/
+.ssh/
+.npmrc
+*.pem
+*.key
+*.p12
+*.pfx
+credentials
+credentials.*
+secrets/
+
+# Local caches, scratch files, and logs
+work/
+.cache/
+.npm/
+.pip-cache/
+*.log
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

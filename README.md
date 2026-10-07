@@ -1,0 +1,147 @@
+# Urban Flood Intelligence
+
+Urban Flood Intelligence is a civic-tech MVP for answering **“Will my road flood?”** It demonstrates how localized flood-risk information can help residents choose safer routes and help city teams identify intervention priorities.
+
+The current demo uses Koramangala, Bengaluru and deterministic sample data. Its map is illustrative; it is not a live GIS map or a flood warning service.
+
+## Features
+
+- Search demo roads and neighbourhoods, or select road segments from the map.
+- View a risk score, severity, peak window, rainfall, confidence, hourly outlook, and contributing factors.
+- See practical safety suggestions and compare a safer route with the fastest route.
+- Change rainfall, drainage capacity, and rainfall start time in the what-if simulator.
+- Switch to Municipality Mode to inspect ranked hotspots and a sample drainage intervention.
+- Use a FastAPI backend for risk, route, scenario, and hotspot demo data.
+
+## Tech stack
+
+- React and TypeScript, bundled with Vite
+- SVG/CSS illustrative map and Lucide icons
+- Python and FastAPI, served by Uvicorn
+- Deterministic mock data in the API; no database or external GIS/weather API is required
+
+## Project structure
+
+```text
+.
+├── backend/
+│   ├── main.py              # FastAPI app and deterministic demo endpoints
+│   └── requirements.txt     # Python dependencies
+├── src/
+│   ├── main.tsx             # React UI and API integration
+│   ├── style.css            # Main responsive styles
+│   ├── interactions.css     # Map hit targets and interaction styles
+│   └── vite-env.d.ts        # Vite type declarations
+├── index.html               # Vite HTML entry point
+├── package.json             # Frontend scripts and dependencies
+├── package-lock.json        # Locked npm dependency tree
+├── requirements.txt         # Root dependency entry point for source deployments
+├── tsconfig.json
+└── vite.config.ts           # Local /api proxy to FastAPI
+```
+
+## Run the frontend locally
+
+Requirements: Node.js 20 or a compatible current LTS release, plus Python 3.10+ for the API.
+
+From the project root:
+
+```bash
+npm install
+npm run dev
+```
+
+Open the Vite URL shown in the terminal (usually <http://localhost:5173>). The Vite development server proxies `/api` requests to `http://127.0.0.1:8000`.
+
+To create a production frontend build:
+
+```bash
+npm run build
+```
+
+The static site is written to `dist/`.
+
+## Run the FastAPI backend locally
+
+From the project root, create and activate a virtual environment, install the backend requirements, then start Uvicorn:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+uvicorn backend.main:app --reload --port 8000
+```
+
+The API is available at <http://localhost:8000>. Interactive API documentation is at <http://localhost:8000/docs>.
+
+## API endpoints
+
+All routes are prefixed with `/api`.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/risk` | Demo risk score, severity, peak time, rainfall, and confidence |
+| `POST` | `/api/route-risk` | Safer and fastest demo route options |
+| `POST` | `/api/simulate` | Recalculate demo risk from rainfall, drainage, and start-time changes |
+| `GET` | `/api/hotspots` | Ranked demo flood hotspots |
+
+Example simulator request:
+
+```json
+{
+  "rainfall_delta": 20,
+  "drainage_delta": 10,
+  "start_shift": -2
+}
+```
+
+## Environment variables
+
+No environment file is required for local development. Local configuration files such as `.env` and `.env.*` are ignored by Git.
+
+| Variable | Used by | Purpose | Default |
+| --- | --- | --- | --- |
+| `VITE_API_BASE_URL` | Frontend build | API origin prepended to `/api` in a deployed frontend. Leave unset locally to use Vite's `/api` proxy. | Empty |
+| `CORS_ORIGINS` | FastAPI backend | Comma-separated allowed frontend origins. Set this to the deployed frontend origin(s) in AWS. | `http://localhost:5173` |
+
+For a deployed frontend build, set `VITE_API_BASE_URL` to the App Runner service URL before running `npm run build`. Do not put credentials or secrets in frontend environment variables; Vite variables are included in the browser bundle.
+
+## Current MVP limitations
+
+- Scores, rainfall, roads, routes, and hotspots are deterministic demo data, not operational forecasts.
+- The map is a stylized illustration with selectable demo roads. It has no real map tiles, geocoding, GPS, or routing.
+- The simulator is a small weighted formula, not a calibrated hydrology or machine-learning model.
+- No database, authentication, notifications, live weather, sensor feeds, monitoring, or municipal system integrations are included.
+- Route and intervention results illustrate the workflow and should not be used for real-world decisions.
+
+## AWS deployment architecture
+
+The suggested MVP architecture uses AWS services configured manually in the AWS Management Console:
+
+```text
+Browser
+  ├── CloudFront (HTTPS/CDN) ── private S3 bucket (Vite static build)
+  └── HTTPS ── AWS App Runner (FastAPI API)
+```
+
+CloudFront serves the static Vite build from a private S3 origin using Origin Access Control (OAC). App Runner hosts the FastAPI service from the source repository. The frontend calls the App Runner URL; `CORS_ORIGINS` on App Runner allows the CloudFront origin. The MVP uses no AWS database or other managed data service.
+
+## Manual AWS Console deployment
+
+No AWS infrastructure is provisioned by this repository. It contains no CDK, Terraform, CloudFormation, Pulumi, or other infrastructure-as-code.
+
+1. **Create the API service.** In the AWS Console, create an App Runner service from the GitHub repository and branch. Select the Python runtime offered in the console. Use the repository root as the source directory, set the build command to `pip install -r requirements.txt`, and set the start command to `uvicorn backend.main:app --host 0.0.0.0 --port 8000`. Configure the App Runner service's HTTP port as `8000`.
+2. **Set API configuration.** In App Runner service environment variables, set `CORS_ORIGINS` to the eventual CloudFront distribution origin, for example `https://d123example.cloudfront.net`. Redeploy after changing it. Copy the resulting App Runner service URL.
+3. **Build the frontend for the API.** In a local terminal, set `VITE_API_BASE_URL` to the App Runner URL, then run `npm run build`. For example: `VITE_API_BASE_URL="https://your-service.region.awsapprunner.com" npm run build`. This value is a public API URL, not a secret.
+4. **Create the static origin.** In the AWS Console, create an S3 bucket for the frontend. Keep Block Public Access enabled. Upload the *contents* of `dist/` to the bucket root.
+5. **Create CloudFront.** Create a CloudFront distribution with the S3 bucket as its origin. Use Origin Access Control so CloudFront can read the private bucket, set the default root object to `index.html`, and allow HTTPS. Apply the bucket policy suggested by the CloudFront console.
+6. **Finish and verify.** Copy the CloudFront distribution domain, set that exact origin in App Runner's `CORS_ORIGINS`, and redeploy the API if needed. Invalidate the CloudFront cache after uploading a later build. Open the CloudFront URL and confirm the API data loads.
+
+These instructions are a starting point for a demo deployment. Review AWS account, region, access, and cost settings in the console before creating services.
+
+## Contributing
+
+1. Create a branch for your change.
+2. Keep demo data separate from UI behavior where practical, and preserve the local no-external-API workflow.
+3. Before opening a pull request, run `npm run build` and verify the affected API route locally.
+4. Never commit credentials, `.env` files, local caches, or generated build/virtual-environment folders.
