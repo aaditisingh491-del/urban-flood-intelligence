@@ -30,7 +30,6 @@ import {
 
   MapPin,
 
-  Menu,
 
   Minus,
 
@@ -55,6 +54,7 @@ import './style.css';
 import './interactions.css';
 
 import AuthModal from './AuthModal';
+import InteractiveMap from './InteractiveMap';
 
 import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
 
@@ -75,6 +75,8 @@ type Risk = {
   rainfall: number;
 
   confidence: string;
+
+  coordinates?: { latitude: number; longitude: number };
 
 };
 
@@ -179,6 +181,8 @@ const api = async <T,>(
 function App() {
 
   const [authOpen, setAuthOpen] = useState(false);
+  const [riskCoordinates, setRiskCoordinates] = useState<{ latitude: number; longitude: number } | null>({ latitude: 12.9352, longitude: 77.6245 });
+  const [mapRisk, setMapRisk] = useState(initial.risk);
 
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
 
@@ -264,7 +268,11 @@ function App() {
 
     api<Risk>('/risk').then((data) => {
 
-      if (data) setRisk(data);
+      if (data) {
+        setRisk(data);
+        setMapRisk(data.risk);
+        if (data.coordinates?.latitude && data.coordinates?.longitude) setRiskCoordinates(data.coordinates);
+      }
 
     });
 
@@ -382,7 +390,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
       );
 
-    setScenarioBase(data?.current_risk ?? 78);
+    setScenarioBase(risk.risk);
 
     setRisk({
 
@@ -416,6 +424,15 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
   };
 
+  const resetScenario = () => {
+    setRain(42);
+    setDrain(55);
+    setStart(0);
+    setSim(false);
+    setScenarioPeak(null);
+    setRisk((current) => ({ ...current, risk: scenarioBase, level: scenarioBase > 75 ? 'HIGH' : scenarioBase > 45 ? 'MODERATE' : 'LOW' }));
+  };
+
   const alert = (message: string) => {
 
     setToast(message);
@@ -440,81 +457,42 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
           <div>
 
-            <strong>Floodline</strong>
+            <strong>FloodSense</strong>
 
-            <span>URBAN INTELLIGENCE</span>
+            <span>URBAN FLOOD INTELLIGENCE</span>
 
           </div>
 
         </div>
 
-        <div className="top-center">
-
-          <span className="live-dot" /> Bengaluru{' '}
-
-          <span className="top-sep">/</span> Monsoon watch{' '}
-
-          <span className="live-pill">LIVE DEMO</span>
-
-        </div>
-
+        <nav className="top-nav" aria-label="Main navigation">
+          <a href="#dashboard">Explore</a>
+          <a href="#about">About</a>
+        </nav>
         <div className="top-actions">
-
-          <button
-
-            className="icon-btn"
-
-            onClick={() => alert('Menu')}
-
-            aria-label="Open menu"
-
-          >
-
-            <Menu size={18} />
-
+          <button type="button" className="avatar profile-trigger" onClick={() => setAuthOpen(true)} aria-label="Login / Sign Up" title={currentUser ? `Account: ${currentUser.username}` : 'Login / Sign Up'}>
+            {currentUser ? currentUser.firstName.charAt(0).toUpperCase() : <UserRound size={17} aria-hidden="true" />}
           </button>
-
-          <button
-
-            type="button"
-
-            className="avatar"
-
-            onClick={() => setAuthOpen(true)}
-
-            aria-label={currentUser ? 'Open account' : 'Sign in'}
-
-            title={
-              currentUser
-                ? `User ID: ${currentUser.username}`
-                : 'Sign in'
-            }
-
-            style={{
-
-              border: 0,
-
-              cursor: 'pointer',
-
-              font: 'inherit',
-
-            }}
-
-          >
-
-            {currentUser ? (
-              currentUser.firstName.charAt(0).toUpperCase()
-            ) : (
-              <UserRound size={16} aria-hidden="true" />
-            )}
-
-          </button>
-
         </div>
 
       </header>
 
-      <main>
+      <section className="hero-section" aria-labelledby="hero-title">
+        <div className="hero-copy">
+          <p className="hero-kicker"><span /> URBAN FLOOD INTELLIGENCE</p>
+          <h1 id="hero-title">Know your flood risk <em>before the rain arrives.</em></h1>
+          <p className="hero-lede">Understand where waterlogging could disrupt your journey. Explore neighbourhood risk, compare safer routes, and see how changing rainfall and drainage conditions affect the outlook.</p>
+          <div className="hero-actions"><a className="hero-primary" href="#dashboard">Explore flood risk <ArrowRight size={16} /></a><a className="hero-secondary" href="#about">How it works <ArrowDownRight size={15} /></a></div>
+          <div className="hero-proof"><span><b>01</b><small>RISK MONITORING</small></span><i /><span><b>{risk.risk}%</b><small>SELECTED SAMPLE SCORE</small></span><i /><span><b>{rain} mm/hr</b><small>ILLUSTRATIVE RAINFALL</small></span></div>
+        </div>
+        <figure className="hero-visual hero-photo">
+          <img src="/images/urban-flood-hyderabad.jpg" alt="A flooded urban street in Hyderabad after the 2020 floods" />
+          <figcaption>Flooded street in Hyderabad, 2020 · Demonstration imagery. <a href="https://commons.wikimedia.org/wiki/File:2020_Hyderabad_floods.jpg" target="_blank" rel="noreferrer">Photo: Strike Eagle · CC BY-SA 4.0</a></figcaption>
+        </figure>
+        <div className="hero-disclaimer"><span>LOCATION-LEVEL FLOOD INTELLIGENCE</span><span>DETERMINISTIC DEMO DATA · NOT AN OFFICIAL FORECAST</span></div>
+      </section>
+
+      <main id="dashboard">
 
         <div className="intro">
 
@@ -524,7 +502,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
               <span className="eyebrow-line" />
 
-              YOUR NEIGHBOURHOOD, FORECAST AHEAD
+              YOUR NEIGHBOURHOOD, SAMPLE OUTLOOK
 
             </div>
 
@@ -536,7 +514,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
             <p>
 
-              Local flood risk, so you can make your next move with confidence.
+              Explore illustrative local risk and understand the assumptions behind the outlook.
 
             </p>
 
@@ -560,7 +538,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
               className={mode === 'city' ? 'active' : ''}
 
-              onClick={() => setMode('city')}
+              onClick={() => { setMode('city'); const first = hotspotData[0]; if (first) choose(first.name, first.risk); }}
 
             >
 
@@ -572,7 +550,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
         </div>
 
-        <div className="controls">
+        {mode === 'citizen' && <div className="controls">
 
           <div className="searchbox">
 
@@ -676,7 +654,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
           </div>
 
-        </div>
+        </div>}
 
         {mode === 'city' ? (
 
@@ -687,6 +665,12 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
             onNotify={alert}
 
             records={hotspotData}
+
+            rain={rain} drain={drain} start={start} sim={sim} risk={risk.risk} scenarioPeak={scenarioPeak}
+            onRain={(value) => { setRain(value); setSim(false); setScenarioPeak(null); }}
+            onDrain={(value) => { setDrain(value); setSim(false); setScenarioPeak(null); }}
+            onStart={(value) => { setStart(value); setSim(false); setScenarioPeak(null); }}
+            onSimulate={simulate} onReset={resetScenario}
 
           />
 
@@ -704,7 +688,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
                     <MapPin size={16} />
 
-                    {route ? 'Home → Office' : selected}
+                    {route ? 'Route alternatives' : 'Bengaluru demo coordinate'}
 
                     <ChevronDown size={14} />
 
@@ -718,215 +702,21 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
                       : 'Koramangala, Bengaluru'}{' '}
 
-                    <span>·</span> Updated 4 min ago
+                    <span>·</span> DEMO DATA · NOT LIVE
 
                   </div>
 
                 </div>
 
-                <div className="map-tools">
 
-                  <button
-
-                    title="Zoom in"
-
-                    onClick={() => alert('Map zoomed in')}
-
-                  >
-
-                    <Plus size={16} />
-
-                  </button>
-
-                  <button
-
-                    title="Zoom out"
-
-                    onClick={() => alert('Map zoomed out')}
-
-                  >
-
-                    <Minus size={16} />
-
-                  </button>
-
-                  <button
-
-                    title="Layers"
-
-                    onClick={() => alert('Map layers opened')}
-
-                  >
-
-                    <SlidersHorizontal size={16} />
-
-                  </button>
-
-                </div>
 
               </div>
 
-              <div className="map">
-
-                <div className="map-grid" />
-
-                <div className="park park-one">
-
-                  <span>Jakkasandra Park</span>
-
-                </div>
-
-                <div className="park park-two" />
-
-                <div className="lake">
-
-                  <span>Agara Lake</span>
-
-                </div>
-
-                <div className="map-label label-a">KORAMANGALA 5TH BLOCK</div>
-
-                <div className="map-label label-b">80 FEET ROAD</div>
-
-                <div className="map-label label-c">HOSUR ROAD</div>
-
-                <svg
-
-                  className="roads"
-
-                  viewBox="0 0 760 480"
-
-                  preserveAspectRatio="none"
-
-                >
-
-                  <path
-
-                    className="road-base"
-
-                    d="M-30 370 C130 315 230 330 350 245 S570 145 790 185"
-
-                  />
-
-                  <path
-
-                    onClick={() => choose('5th Cross Road', 58)}
-
-                    className="risk-road moderate interactive-road"
-
-                    d="M-30 370 C130 315 230 330 350 245"
-
-                  />
-
-                  <path
-
-                    onClick={() => choose('80 Feet Road', 82)}
-
-                    className="risk-road high interactive-road"
-
-                    d="M350 245 C460 180 545 145 625 160"
-
-                  />
-
-                  <path
-
-                    onClick={() => choose('4th Cross Road', 24)}
-
-                    className="risk-road low interactive-road"
-
-                    d="M110 55 C210 130 250 200 350 245 S500 340 650 430"
-
-                  />
-
-                  <path
-
-                    className="road-base"
-
-                    d="M40 170 C180 180 230 190 325 210 S540 270 760 255"
-
-                  />
-
-                  <path
-
-                    className="risk-road moderate"
-
-                    d="M40 170 C180 180 230 190 325 210"
-
-                  />
-
-                  <path
-
-                    className="road-base"
-
-                    d="M575 0 C550 110 535 200 515 280 S490 380 475 500"
-
-                  />
-
-                  {route && (
-
-                    <path
-
-                      className="route-trace"
-
-                      d="M110 55 C210 130 250 200 350 245 S500 340 650 430"
-
-                    />
-
-                  )}
-
-                  <circle cx="350" cy="245" r="10" className="pin-halo" />
-
-                  <circle cx="350" cy="245" r="4" className="pin-dot" />
-
-                </svg>
-
-                <button
-
-                  className="map-hitbox hit-moderate"
-
-                  aria-label="Select 5th Cross Road, moderate risk"
-
-                  onClick={() => choose('5th Cross Road', 58)}
-
-                />
-
-                <button
-
-                  className="map-hitbox hit-high"
-
-                  aria-label="Select 80 Feet Road, high risk"
-
-                  onClick={() => choose('80 Feet Road', 82)}
-
-                />
-
-                <button
-
-                  className="map-hitbox hit-low"
-
-                  aria-label="Select 4th Cross Road, low risk"
-
-                  onClick={() => choose('4th Cross Road', 24)}
-
-                />
-
-                <div className="map-tip">
-
-                  <span className="tip-dot" />{' '}
-
-                  {route ? 'Safer route · 4th Cross' : 'Selected segment'}{' '}
-
-                  <b>{risk.risk}%</b>
-
-                </div>
-
-                <div className="scale">
-
-                  500 m <span />
-
-                </div>
-
-              </div>
+              <InteractiveMap
+                risk={mapRisk}
+                coordinates={riskCoordinates}
+                onSelect={() => choose('Koramangala 5th Block', mapRisk)}
+              />
 
               <div className="map-legend">
 
@@ -962,11 +752,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
                 </span>
 
-                <button onClick={() => alert('Map layers opened')}>
 
-                  Map layers <ChevronDown size={13} />
-
-                </button>
 
               </div>
 
@@ -1011,24 +797,8 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
                 <div className="risk-place">{selected}</div>
 
                 <div className="risk-summary">
-
-                  Road flooding is{' '}
-
-                  <b>
-
-                    {risk.level === 'HIGH'
-
-                      ? 'likely'
-
-                      : risk.level === 'MODERATE'
-
-                        ? 'possible'
-
-                        : 'unlikely'}
-
-                  </b>{' '}
-
-                  during the evening peak.
+                  The demonstration model classifies the selected sample as{' '}
+                  <b>{risk.level.toLowerCase()} risk</b> for its illustrative evening window.
 
                 </div>
 
@@ -1068,7 +838,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
                   <ShieldCheck size={14} />
 
-                  High confidence <span>Based on 6 local signals</span>
+                  DEMO CONFIDENCE <span>Illustrative indicator label</span>
 
                 </div>
 
@@ -1086,7 +856,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
                     </div>
 
-                    <h3>Tonight's outlook</h3>
+                    <h3>Illustrative evening outlook</h3>
 
                     <span className="small-muted">
 
@@ -1104,7 +874,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
                   className="hourly-forecast"
 
-                  aria-label="Hourly flood risk forecast"
+                  aria-label="Illustrative hourly flood-risk timeline"
 
                 >
 
@@ -1190,7 +960,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
                   <div className="eyebrow tiny">
 
-                    <Sparkles size={13} /> PERSONALIZED FOR THIS ROAD
+                    <Sparkles size={13} /> SAMPLE PREPAREDNESS IDEAS
 
                   </div>
 
@@ -1618,9 +1388,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
               <p className="explanation">
 
-                Intense rainfall is meeting <b>limited drainage</b> on low-lying
-
-                roads. This stretch has flooded 4 times in the last 3 monsoons.
+                The sample scenario combines rainfall, drainage, and location indicators. These values are illustrative and do not describe verified current conditions.
 
               </p>
 
@@ -1716,7 +1484,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
                   >
 
-                    <option value={0}>At forecast time</option>
+                    <option value={0}>At sample start time</option>
 
                     <option value={-2}>2 hours earlier</option>
 
@@ -1732,7 +1500,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
                 <div className="sim-result">
 
-                  <span>{sim ? 'SCENARIO RISK' : 'CURRENT RISK'}</span>
+                  <span>{sim ? 'SCENARIO RISK' : 'BASELINE DEMO RISK'}</span>
 
                   <b>
 
@@ -1754,7 +1522,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
                       <>
 
-                        {risk.risk}% <small>today</small>
+                        {risk.risk}% <small>sample baseline</small>
 
                       </>
 
@@ -1774,11 +1542,11 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
                 </div>
 
-                <button onClick={simulate}>
+                <div className="scenario-buttons"><button onClick={resetScenario} className="scenario-reset">Reset</button><button onClick={simulate}>
 
                   Run scenario <ArrowRight size={15} />
 
-                </button>
+                </button></div>
 
               </div>
 
@@ -1787,6 +1555,21 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
           </div>
 
         )}
+
+        <section className="about-page about-compact" id="about" aria-labelledby="about-title">
+          <div className="about-compact-heading">
+            <span className="section-index">ABOUT FLOODSENSE</span>
+            <h2 id="about-title">A clearer view of local flood risk.</h2>
+            <p>FloodSense helps people explore urban flood risk, understand potential waterlogging hotspots, and compare routes using an interactive risk dashboard.</p>
+          </div>
+          <div className="about-feature-grid">
+            <article><MapPin size={18} /><h3>Explore Risk</h3><p>Inspect available locations and understand their displayed sample risk levels.</p></article>
+            <article><Compass size={18} /><h3>Compare Routes</h3><p>Explore existing route alternatives and their estimated travel time and sample risk.</p></article>
+            <article><CloudRain size={18} /><h3>Test Scenarios</h3><p>Adjust rainfall, drainage, and start-time assumptions to see how the demo responds.</p></article>
+          </div>
+          <div className="about-limits"><ShieldCheck size={17} /><p><b>Prototype using demonstration values.</b> Scores, routes, timelines, and recommendations are not official forecasts or verified live observations. Hotspot records currently lack map coordinates; future live data and validated models are not current capabilities.</p></div>
+          <p className="about-demo-note">The Bengaluru Monsoon Watch experience currently uses a deterministic sample scenario, not verified live flood conditions.</p>
+        </section>
 
         <footer>
 
@@ -1798,7 +1581,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
             </span>
 
-            Floodline{' '}
+            FloodSense{' '}
 
             <span className="footer-copy">
 
@@ -1808,13 +1591,7 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
           </div>
 
-          <span>
-
-            DEMO DATA · KORAMANGALA, BENGALURU <i /> Built for monsoon
-
-            resilience
-
-          </span>
+          <span>DEMONSTRATION DATA · BENGALURU <i /> NOT OFFICIAL SAFETY GUIDANCE</span>
 
         </footer>
 
@@ -1918,6 +1695,8 @@ function Municipality({
 
   records,
 
+  rain, drain, start, sim, risk, scenarioPeak, onRain, onDrain, onStart, onSimulate, onReset,
+
 }: {
 
   onChoose: (name: string, value: number) => void;
@@ -1925,6 +1704,10 @@ function Municipality({
   onNotify: (message: string) => void;
 
   records: HotspotRecord[];
+
+  rain: number; drain: number; start: number; sim: boolean; risk: number; scenarioPeak: string | null;
+  onRain: (value: number) => void; onDrain: (value: number) => void; onStart: (value: number) => void;
+  onSimulate: () => void; onReset: () => void;
 
 }) {
 
@@ -1993,87 +1776,13 @@ const after = Math.round(active[1] * 0.64);
 
           <span className="today-pill">
 
-            <span className="live-dot" /> TONIGHT · 6–9 PM
+            <span className="live-dot" /> ILLUSTRATIVE WINDOW · 6–9 PM
 
           </span>
 
         </div>
 
-        <div className="map municipal-map-art">
-
-          <div className="map-grid" />
-
-          <div className="lake">
-
-            <span>Agara Lake</span>
-
-          </div>
-
-          <svg
-
-            className="roads"
-
-            viewBox="0 0 760 480"
-
-            preserveAspectRatio="none"
-
-          >
-
-            <path
-
-              className="road-base"
-
-              d="M-30 370 C130 315 230 330 350 245 S570 145 790 185"
-
-            />
-
-            <path
-
-              className="risk-road high"
-
-              d="M-30 370 C130 315 230 330 350 245 S570 145 790 185"
-
-            />
-
-            <path
-
-              className="road-base"
-
-              d="M110 55 C210 130 250 200 350 245 S500 340 650 430"
-
-            />
-
-            <path
-
-              className="risk-road moderate"
-
-              d="M110 55 C210 130 250 200 350 245 S500 340 650 430"
-
-            />
-
-          </svg>
-
-          {hotspots.slice(0, 4).map((hotspot, index) => (
-
-            <button
-
-              key={hotspot[0]}
-
-              className={`hotspot hot-${index}`}
-
-              onClick={() => select(hotspot)}
-
-              aria-label={`Select hotspot ${hotspot[0]}`}
-
-            >
-
-              <span>{index + 1}</span>
-
-            </button>
-
-          ))}
-
-        </div>
+        <InteractiveMap risk={active[1]} municipality />
 
         <div className="municipal-map-foot">
 
@@ -2115,9 +1824,9 @@ const after = Math.round(active[1] * 0.64);
 
           </div>
 
-          <button className="text-action" onClick={() => onNotify('Showing tonight’s hotspots')}>
+          <button className="text-action" onClick={() => onNotify('Showing sample hotspots')}>
 
-            Tonight <ChevronDown size={13} />
+            Sample data <ChevronDown size={13} />
 
           </button>
 
@@ -2195,15 +1904,13 @@ const after = Math.round(active[1] * 0.64);
 
           <p className="hotspot-explanation">
 
-            {active[0]} combines intense runoff with limited drainage and a
-
-            history of monsoon waterlogging.
+            This hotspot record includes a sample risk score only; incident history and drainage measurements are not available in the current API.
 
           </p>
 
           <div className="intervention-impact">
 
-            <span>Projected risk reduction</span>
+            <span>Illustrative scenario score</span>
 
             <b>
 
@@ -2228,6 +1935,17 @@ const after = Math.round(active[1] * 0.64);
           </button>
 
         </div>
+        <section className="city-scenario">
+          <div className="eyebrow tiny"><CloudRain size={13} /> AREA SCENARIO</div>
+          <h3>Adjust sample assumptions</h3>
+          <div className="city-scenario-sliders">
+            <Slider label="Rainfall intensity" value={rain} min={10} max={80} unit="mm/hr" set={onRain} />
+            <Slider label="Drainage capacity" value={drain} min={10} max={100} unit="%" set={onDrain} />
+            <label className="select-row"><span>Rain starts</span><select value={start} onChange={(event) => onStart(Number(event.target.value))}><option value={0}>Sample start</option><option value={-2}>2 hours earlier</option><option value={2}>2 hours later</option></select></label>
+          </div>
+          <div className="city-scenario-result"><span>{sim ? `Illustrative result · ${scenarioPeak || 'adjusted window'}` : 'Selected hotspot sample score'}</span><b>{risk}%</b></div>
+          <div className="scenario-buttons"><button className="scenario-reset" onClick={onReset}>Reset</button><button className="city-simulate" onClick={onSimulate}>Run area scenario <ArrowRight size={14} /></button></div>
+        </section>
 
       </section>
 

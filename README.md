@@ -2,11 +2,11 @@
 
 Urban Flood Intelligence is a civic-tech MVP for answering **“Will my road flood?”** It demonstrates how localized flood-risk information can help residents choose safer routes and help city teams identify intervention priorities.
 
-The current demo uses Koramangala, Bengaluru and deterministic sample data. Its map is illustrative; it is not a live GIS map or a flood warning service.
+The current demo uses Bengaluru locations and sample data. The Leaflet street map is interactive, but its markers show only coordinates explicitly returned by the risk API. It is not a live flood map or a warning service.
 
 ## Features
 
-- Search demo roads and neighbourhoods, or select road segments from the map.
+- Search demo roads and neighbourhoods; pan and zoom the interactive map and inspect the backend-provided demo point.
 - View a risk score, severity, peak window, rainfall, confidence, hourly outlook, and contributing factors.
 - See practical safety suggestions and compare a safer route with the fastest route.
 - Change rainfall, drainage capacity, and rainfall start time in the what-if simulator.
@@ -16,9 +16,13 @@ The current demo uses Koramangala, Bengaluru and deterministic sample data. Its 
 ## Tech stack
 
 - React and TypeScript, bundled with Vite
-- SVG/CSS illustrative map and Lucide icons
+- Leaflet and React-Leaflet with OpenStreetMap tiles; Lucide icons
 - Python and FastAPI, served by Uvicorn
 - Deterministic mock data in the API; no database or external GIS/weather API is required
+
+## Interactive map data and tile service
+
+The frontend uses Leaflet with the standard OpenStreetMap tile service, which is an external service and requires network access. Map imagery availability and usage limits are governed by OpenStreetMap tile-service policies; the map includes required attribution. The risk endpoint currently returns one Bengaluru demo coordinate. The hotspot endpoint returns names and sample scores without coordinates, so the municipality map does not invent hotspot marker positions. Route geometry is also not available in the current API; route alternatives remain in the existing comparison panel rather than being drawn as paths.
 
 ## Project structure
 
@@ -151,3 +155,7 @@ These instructions are a starting point for a demo deployment. Review AWS accoun
 2. Keep demo data separate from UI behavior where practical, and preserve the local no-external-API workflow.
 3. Before opening a pull request, run `npm run build` and verify the affected API route locally.
 4. Never commit credentials, `.env` files, local caches, or generated build/virtual-environment folders.
+
+## Hero photograph attribution
+
+The hero photograph is an unmodified image titled “2020 Hyderabad floods.jpg” by Strike Eagle, sourced from [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:2020_Hyderabad_floods.jpg) and licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). It depicts a flooded street in Hyderabad on 14 October 2020. The photograph is illustrative and does not show current conditions in Bengaluru.
