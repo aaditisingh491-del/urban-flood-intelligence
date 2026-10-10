@@ -81,3 +81,40 @@ def test_hotspots_endpoint():
     for hotspot in data["hotspots"]:
         assert 0 <= hotspot["risk"] <= 100
         assert hotspot["data_status"] == "DEMO"
+
+
+def test_route_risk_endpoint():
+    response = client.post("/api/route-risk", json={})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "routes": [
+            {
+                "name": "4th Cross Road",
+                "travel_time": 41,
+                "flood_risk": 24,
+                "recommended": True,
+            },
+            {
+                "name": "80 Feet Road",
+                "travel_time": 35,
+                "flood_risk": 82,
+                "recommended": False,
+            },
+        ]
+    }
+
+
+def test_route_risk_rejects_unsupported_request_fields():
+    response = client.post(
+        "/api/route-risk",
+        json={"rainfall_delta": 20},
+    )
+
+    assert response.status_code == 422
+
+
+def test_hotspots_endpoint_is_read_only():
+    response = client.post("/api/hotspots", json={})
+
+    assert response.status_code == 405

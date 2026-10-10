@@ -81,9 +81,11 @@ All routes are prefixed with `/api`.
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/risk` | Demo risk score, severity, peak time, rainfall, and confidence |
-| `POST` | `/api/route-risk` | Safer and fastest demo route options |
+| `POST` | `/api/route-risk` | Safer and fastest demo route options; accepts `{}` and returns `routes` with `name`, `travel_time`, `flood_risk`, and `recommended` |
 | `POST` | `/api/simulate` | Recalculate demo risk from rainfall, drainage, and start-time changes |
-| `GET` | `/api/hotspots` | Ranked demo flood hotspots |
+| `GET` | `/api/hotspots` | Ranked, read-only demo flood hotspots |
+
+These demo endpoints are public and stateless: they require no authentication and do not persist changes. `POST /api/route-risk` only returns fixed demo route options; it does not create or update hotspots. There is intentionally no `POST /api/hotspots` endpoint. Hotspot changes require a separately designed administrative workflow, authorization policy, and persistent data store.
 
 Example simulator request:
 
@@ -103,8 +105,12 @@ No environment file is required for local development. Local configuration files
 | --- | --- | --- | --- |
 | `VITE_API_BASE_URL` | Frontend build | API origin prepended to `/api` in a deployed frontend. Leave unset locally to use Vite's `/api` proxy. | Empty |
 | `CORS_ORIGINS` | FastAPI backend | Comma-separated allowed frontend origins. Set this to the deployed frontend origin(s) in AWS. | `http://localhost:5173` |
+| `VITE_COGNITO_USER_POOL_ID` | Frontend build | Cognito user pool used for sign-in, sign-up, and email verification. | Required for authentication |
+| `VITE_COGNITO_CLIENT_ID` | Frontend build | Public app client ID for the Cognito user pool. | Required for authentication |
 
-For a deployed frontend build, set `VITE_API_BASE_URL` to the App Runner service URL before running `npm run build`. Do not put credentials or secrets in frontend environment variables; Vite variables are included in the browser bundle.
+For local authentication, set the Cognito values in `.env.local`. For a deployed frontend build, set `VITE_API_BASE_URL` to the App Runner service URL and provide the Cognito values before running `npm run build`. Set `CORS_ORIGINS` on App Runner to the exact frontend origin so browsers can access the API. Do not put credentials or secrets in frontend environment variables; Vite variables are included in the browser bundle.
+
+Sign-in is handled by Amazon Cognito directly from the browser; the FastAPI backend serves flood-risk data and does not provide authentication endpoints. Run the API locally with the command above, or deploy it and configure `VITE_API_BASE_URL` and `CORS_ORIGINS` for the frontend and backend to communicate.
 
 ## Current MVP limitations
 
