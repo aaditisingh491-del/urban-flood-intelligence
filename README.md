@@ -158,4 +158,10 @@ These instructions are a starting point for a demo deployment. Review AWS accoun
 
 ## Hero photograph attribution
 
-The hero photograph is an unmodified image titled “2020 Hyderabad floods.jpg” by Strike Eagle, sourced from [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:2020_Hyderabad_floods.jpg) and licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). It depicts a flooded street in Hyderabad on 14 October 2020. The photograph is illustrative and does not show current conditions in Bengaluru.
+Hero carousel photographs are historical demonstration imagery, not live Bengaluru observations.
+
+- **Hyderabad (14 October 2020):** “2020 Hyderabad floods.jpg” by Strike Eagle, [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:2020_Hyderabad_floods.jpg), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The local copy is resized to 1600 px wide for web display.
+- **Tatanagar, Bengaluru (22 October 2024):** “Flooding in Bangalore.jpg” by Shyamal, [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Flooding_in_Bangalore.jpg), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The local 1280 px image is served as a Commons thumbnail.
+- **Bhubaneswar (31 August 2025):** “Urban flooding in Bhubaneswar.jpg” by Nathularog, [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Urban_flooding_in_Bhubaneswar.jpg), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). The local 1280 px image is served as a Commons thumbnail.
+- **Rockingham, Western Australia (5 June 2023):** “Flooded stormwater drainage canal at Rockingham, Western Australia, June 2023 05.jpg” by Calistemon, [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Flooded_stormwater_drainage_canal_at_Rockingham,_Western_Australia,_June_2023_05.jpg), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The local image is a 1280 px Commons thumbnail.
+- **Arvada, Colorado (15 September 2013):** “Sandbags for colorado flood.jpg” by Air National Guard Staff Sgt. Nicole Manzanares, [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Sandbags_for_colorado_flood.jpg), public domain as a U.S. federal government work.

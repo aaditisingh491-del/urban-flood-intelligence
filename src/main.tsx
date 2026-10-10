@@ -18,6 +18,10 @@ import {
 
   ChevronDown,
 
+  ChevronLeft,
+
+  ChevronRight,
+
   CloudRain,
 
   Clock3,
@@ -114,6 +118,59 @@ const initial: Risk = {
 
 };
 
+const heroSlides = [
+  {
+    label: 'URBAN FLOOD INTELLIGENCE',
+    headline: <>Know your flood risk <em>before the rain arrives.</em></>,
+    description: 'Explore neighbourhood risk, identify potential waterlogging hotspots, and understand how changing rainfall and drainage conditions affect the outlook.',
+    image: '/images/urban-flood-hyderabad.jpg',
+    alt: 'A flooded street in Hyderabad after the 2020 floods, with cars surrounded by standing water.',
+    caption: 'Hyderabad, October 2020 · Historical demonstration imagery.',
+    source: 'https://commons.wikimedia.org/wiki/File:2020_Hyderabad_floods.jpg',
+    credit: 'Strike Eagle · CC BY-SA 4.0',
+  },
+  {
+    label: 'FLOOD-AWARE ROUTES',
+    headline: <>Understand the risk <em>along your route.</em></>,
+    description: 'Compare available route alternatives and explore the risk information provided by the current demonstration.',
+    image: '/images/flooding-bangalore-2024.jpg',
+    alt: 'Waterlogged street in Tatanagar, Bengaluru, after heavier than normal rains in October 2024.',
+    caption: 'Tatanagar, Bengaluru · 22 October 2024; historical imagery, not a live condition.',
+    source: 'https://commons.wikimedia.org/wiki/File:Flooding_in_Bangalore.jpg',
+    credit: 'Shyamal · CC BY-SA 4.0',
+  },
+  {
+    label: 'SCENARIO EXPLORATION',
+    headline: <>See how conditions can <em>change the picture.</em></>,
+    description: "Explore rainfall and drainage scenarios to understand how the application's displayed risk estimates respond to different assumptions.",
+    image: '/images/urban-flooding-bhubaneswar.jpg',
+    alt: 'Urban flooding in Bhubaneswar during the 2025 monsoon season.',
+    caption: 'Bhubaneswar, August 2025 · Historical demonstration imagery.',
+    source: 'https://commons.wikimedia.org/wiki/File:Urban_flooding_in_Bhubaneswar.jpg',
+    credit: 'Nathularog · CC0 1.0',
+  },
+  {
+    label: 'URBAN DRAINAGE',
+    headline: <>When drains fall behind, <em>streets feel it.</em></>,
+    description: 'Explore how rainfall and drainage assumptions affect the demonstration’s displayed risk estimates—not live street-level monitoring.',
+    image: '/images/flooded-stormwater-drainage-rockingham-2023.jpg',
+    alt: 'A stormwater canal in Rockingham, Western Australia, carrying high water after two days of rain.',
+    caption: 'Rockingham, Western Australia · 5 June 2023; historical imagery.',
+    source: 'https://commons.wikimedia.org/wiki/File:Flooded_stormwater_drainage_canal_at_Rockingham,_Western_Australia,_June_2023_05.jpg',
+    credit: 'Calistemon · CC BY-SA 4.0',
+  },
+  {
+    label: 'FLOOD PREPAREDNESS',
+    headline: <>Prepare early. <em>Understand your risk.</em></>,
+    description: 'Compare sample route risks and explore how rainfall and drainage assumptions shift the dashboard’s illustrative estimates.',
+    image: '/images/flood-preparedness-sandbags-colorado-2013.jpg',
+    alt: 'Emergency responders and National Guard members distributing sandbags in Arvada, Colorado, during 2013 flood response.',
+    caption: 'Arvada, Colorado · 15 September 2013; historical response imagery.',
+    source: 'https://commons.wikimedia.org/wiki/File:Sandbags_for_colorado_flood.jpg',
+    credit: 'Staff Sgt. Nicole Manzanares, U.S. Air National Guard · Public domain',
+  },
+] as const;
+
 const hours = [
 
   ['5 PM', 42],
@@ -181,6 +238,13 @@ const api = async <T,>(
 function App() {
 
   const [authOpen, setAuthOpen] = useState(false);
+  const [activeHeroSlide, setActiveHeroSlide] = useState(0);
+  const [heroAutoplayReset, setHeroAutoplayReset] = useState(0);
+  const [heroImageFailures, setHeroImageFailures] = useState<Record<number, number>>({});
+  const [heroHovered, setHeroHovered] = useState(false);
+  const [heroFocused, setHeroFocused] = useState(false);
+  const [heroPageVisible, setHeroPageVisible] = useState(() => document.visibilityState === 'visible');
+  const [heroReducedMotion, setHeroReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const [riskCoordinates, setRiskCoordinates] = useState<{ latitude: number; longitude: number } | null>({ latitude: 12.9352, longitude: 77.6245 });
   const [mapRisk, setMapRisk] = useState(initial.risk);
 
@@ -209,6 +273,27 @@ function App() {
   const [route, setRoute] = useState(false);
 
   const [toast, setToast] = useState('');
+
+  useEffect(() => {
+    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updateVisibility = () => setHeroPageVisible(document.visibilityState === 'visible');
+    const updateMotionPreference = () => setHeroReducedMotion(motionPreference.matches);
+
+    document.addEventListener('visibilitychange', updateVisibility);
+    motionPreference.addEventListener('change', updateMotionPreference);
+    return () => {
+      document.removeEventListener('visibilitychange', updateVisibility);
+      motionPreference.removeEventListener('change', updateMotionPreference);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (heroHovered || heroFocused || !heroPageVisible || heroReducedMotion) return;
+    const timer = window.setTimeout(() => {
+      setActiveHeroSlide((current) => (current + 1) % heroSlides.length);
+    }, 5000);
+    return () => window.clearTimeout(timer);
+  }, [activeHeroSlide, heroAutoplayReset, heroFocused, heroHovered, heroPageVisible, heroReducedMotion]);
 
   const [routeOptions, setRouteOptions] = useState<RouteOption[]>([
 
@@ -441,6 +526,22 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
   };
 
+  const showHeroSlide = (offset: number) => {
+    setActiveHeroSlide((current) => (current + offset + heroSlides.length) % heroSlides.length);
+    setHeroAutoplayReset((current) => current + 1);
+    setHeroFocused(false);
+  };
+
+  const handleHeroKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      showHeroSlide(-1);
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      showHeroSlide(1);
+    }
+  };
+
   return (
 
     <div className="app">
@@ -477,18 +578,59 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
 
       </header>
 
-      <section className="hero-section" aria-labelledby="hero-title">
-        <div className="hero-copy">
-          <p className="hero-kicker"><span /> URBAN FLOOD INTELLIGENCE</p>
-          <h1 id="hero-title">Know your flood risk <em>before the rain arrives.</em></h1>
-          <p className="hero-lede">Understand where waterlogging could disrupt your journey. Explore neighbourhood risk, compare safer routes, and see how changing rainfall and drainage conditions affect the outlook.</p>
-          <div className="hero-actions"><a className="hero-primary" href="#dashboard">Explore flood risk <ArrowRight size={16} /></a><a className="hero-secondary" href="#about">How it works <ArrowDownRight size={15} /></a></div>
-          <div className="hero-proof"><span><b>01</b><small>RISK MONITORING</small></span><i /><span><b>{risk.risk}%</b><small>SELECTED SAMPLE SCORE</small></span><i /><span><b>{rain} mm/hr</b><small>ILLUSTRATIVE RAINFALL</small></span></div>
-        </div>
-        <figure className="hero-visual hero-photo">
-          <img src="/images/urban-flood-hyderabad.jpg" alt="A flooded urban street in Hyderabad after the 2020 floods" />
-          <figcaption>Flooded street in Hyderabad, 2020 · Demonstration imagery. <a href="https://commons.wikimedia.org/wiki/File:2020_Hyderabad_floods.jpg" target="_blank" rel="noreferrer">Photo: Strike Eagle · CC BY-SA 4.0</a></figcaption>
-        </figure>
+      <section
+        className="hero-section hero-carousel"
+        aria-label="FloodSense introduction"
+        aria-roledescription="carousel"
+        onKeyDown={handleHeroKeyDown}
+        onMouseEnter={() => setHeroHovered(true)}
+        onMouseLeave={() => setHeroHovered(false)}
+        onFocusCapture={() => setHeroFocused(true)}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHeroFocused(false);
+        }}
+      >
+        {heroSlides.map((slide, index) => {
+          if (index !== activeHeroSlide) return null;
+          const failures = heroImageFailures[index] ?? 0;
+          const imageSrc = failures === 1 ? '/images/urban-flood-hyderabad.jpg' : slide.image;
+          return (
+            <React.Fragment key={slide.label}>
+              <div className="hero-copy hero-copy-slide" role="group" aria-roledescription="slide" aria-label={`Slide ${index + 1} of ${heroSlides.length}`}>
+                <p className="hero-kicker"><span /> {slide.label}</p>
+                <h1 id="hero-title">{slide.headline}</h1>
+                <p className="hero-lede">{slide.description}</p>
+                <div className="hero-actions"><a className="hero-primary" href="#dashboard">Explore flood risk <ArrowRight size={16} /></a><a className="hero-secondary" href="#about">How it works <ArrowDownRight size={15} /></a></div>
+                <div className="hero-proof"><span><b>01</b><small>RISK MONITORING</small></span><i /><span><b>{risk.risk}%</b><small>SELECTED SAMPLE SCORE</small></span><i /><span><b>{rain} mm/hr</b><small>ILLUSTRATIVE RAINFALL</small></span></div>
+              </div>
+              <figure className="hero-visual hero-photo hero-photo-slide">
+                {failures >= 2 ? (
+                  <div className="hero-photo-fallback" role="img" aria-label={slide.alt}><Waves size={34} /><span>Flood image unavailable</span></div>
+                ) : (
+                  <img
+                    src={imageSrc}
+                    alt={slide.alt}
+                    loading={index === 0 ? 'eager' : 'lazy'}
+                    onError={() => setHeroImageFailures((current) => ({ ...current, [index]: Math.min((current[index] ?? 0) + 1, 2) }))}
+                  />
+                )}
+                <figcaption className="hero-photo-credit">{slide.caption} <a href={slide.source} target="_blank" rel="noreferrer">{slide.credit}</a></figcaption>
+                <div className="hero-slide-controls" aria-label="Carousel controls">
+                  <div className="hero-slide-indicators" aria-label="Choose slide">
+                    {heroSlides.map((item, itemIndex) => (
+                      <button key={item.label} type="button" className={itemIndex === activeHeroSlide ? 'active' : ''} aria-label={`Go to slide ${itemIndex + 1}: ${item.label}`} aria-pressed={itemIndex === activeHeroSlide} onClick={() => { setActiveHeroSlide(itemIndex); setHeroAutoplayReset((current) => current + 1); if (itemIndex !== activeHeroSlide) setHeroFocused(false); }} />
+                    ))}
+                  </div>
+                  <span className="hero-slide-count" aria-live="polite">{String(index + 1).padStart(2, '0')} <i>/</i> {String(heroSlides.length).padStart(2, '0')}</span>
+                  <div className="hero-slide-arrows">
+                    <button type="button" aria-label="Previous slide" onClick={() => showHeroSlide(-1)}><ChevronLeft size={17} /></button>
+                    <button type="button" aria-label="Next slide" onClick={() => showHeroSlide(1)}><ChevronRight size={17} /></button>
+                  </div>
+                </div>
+              </figure>
+            </React.Fragment>
+          );
+        })}
         <div className="hero-disclaimer"><span>LOCATION-LEVEL FLOOD INTELLIGENCE</span><span>DETERMINISTIC DEMO DATA · NOT AN OFFICIAL FORECAST</span></div>
       </section>
 
@@ -1571,31 +1713,19 @@ Math.round(78 + (rain - 42) * 0.65 - (drain - 55) * 0.45)
           <p className="about-demo-note">The Bengaluru Monsoon Watch experience currently uses a deterministic sample scenario, not verified live flood conditions.</p>
         </section>
 
-        <footer>
-
-          <div>
-
-            <span className="footer-mark">
-
-              <Waves size={15} />
-
-            </span>
-
-            FloodSense{' '}
-
-            <span className="footer-copy">
-
-              A clearer picture of what's coming.
-
-            </span>
-
-          </div>
-
-          <span>DEMONSTRATION DATA · BENGALURU <i /> NOT OFFICIAL SAFETY GUIDANCE</span>
-
-        </footer>
-
       </main>
+
+      <footer className="site-footer" aria-label="FloodSense site footer">
+        <div className="site-footer-columns">
+          <section aria-labelledby="footer-system"><h2 id="footer-system">System</h2><a href="#about">About FloodSense</a><a href="#dashboard">Explore Flood Risk</a><a href="#about">How It Works</a></section>
+          <section aria-labelledby="footer-standard"><h2 id="footer-standard">Standard</h2><a href="#dashboard">Risk Indicators</a><a href="#dashboard">Route Comparison</a><a href="#dashboard">Scenario Explorer</a></section>
+          <section aria-labelledby="footer-workspace"><h2 id="footer-workspace">Workspace</h2><button type="button" onClick={() => setAuthOpen(true)}>Login / Sign Up</button><a href="#dashboard">Open Dashboard</a><a href="#dashboard">Citizen / Municipality Views</a></section>
+        </div>
+        <div className="site-footer-bottom">
+          <div className="site-footer-brand"><span className="footer-mark"><Waves size={17} /></span><strong>FloodSense</strong><span>A clearer view of local flood risk.</span></div>
+          <p>© 2026 FloodSense · Urban flood-risk demonstration</p>
+        </div>
+      </footer>
 
       {authOpen && (
 
