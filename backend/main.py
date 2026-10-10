@@ -3,7 +3,7 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from backend.weather_service import get_weather_data
 from backend.gis_service import get_elevation
@@ -36,6 +36,21 @@ class Scenario(BaseModel):
     rainfall_delta: float = 0
     drainage_delta: float = 0
     start_shift: int = 0
+
+
+class RouteRiskRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class RouteOption(BaseModel):
+    name: str
+    travel_time: int
+    flood_risk: int
+    recommended: bool
+
+
+class RouteRiskResponse(BaseModel):
+    routes: list[RouteOption]
 
 
 @app.get("/api/risk")
@@ -153,6 +168,26 @@ def simulate(s: Scenario):
         return {
             "error": "Simulation is currently unavailable."
         }
+
+
+@app.post("/api/route-risk", response_model=RouteRiskResponse)
+def route_risk(request: RouteRiskRequest):
+    return {
+        "routes": [
+            {
+                "name": "4th Cross Road",
+                "travel_time": 41,
+                "flood_risk": 24,
+                "recommended": True,
+            },
+            {
+                "name": "80 Feet Road",
+                "travel_time": 35,
+                "flood_risk": 82,
+                "recommended": False,
+            },
+        ]
+    }
 
 
 @app.get("/api/hotspots")
