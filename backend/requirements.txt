@@ -1,5 +1,6 @@
 fastapi
 uvicorn[standard]
 httpx
+boto3
 pytest
 python-dotenv
