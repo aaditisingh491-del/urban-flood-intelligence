@@ -150,3 +150,144 @@ html[data-theme="dark"] .flood-map .leaflet-control-attribution {
   color: #d5dedc;
   background: rgb(17 27 35 / 88%);
 }
+
+/* Light mode surfaces for elements whose base styles are intentionally dark. */
+html[data-theme="light"] .hero-photo {
+  border-color: #cbd9d1;
+  background: var(--ui-surface);
+  box-shadow: 0 18px 44px rgb(32 51 46 / 12%);
+}
+html[data-theme="light"] .hero-photo-credit {
+  color: var(--ui-muted);
+  background: var(--ui-surface);
+}
+html[data-theme="light"] .hero-photo-credit a,
+html[data-theme="light"] .site-footer-columns a:hover,
+html[data-theme="light"] .site-footer-columns button:hover {
+  color: #21634d;
+}
+html[data-theme="light"] .hero-slide-controls {
+  border-color: var(--ui-border);
+  background: var(--ui-surface);
+}
+html[data-theme="light"] .hero-slide-indicators button {
+  background: #9aada4;
+}
+html[data-theme="light"] .hero-slide-indicators button.active {
+  background: #28735b;
+}
+html[data-theme="light"] .hero-slide-count {
+  color: var(--ui-secondary);
+}
+html[data-theme="light"] .hero-slide-count i {
+  color: var(--ui-muted);
+}
+html[data-theme="light"] .hero-slide-arrows button {
+  border-color: var(--ui-border);
+  background: var(--ui-raised);
+  color: var(--ui-secondary);
+}
+html[data-theme="light"] .hero-slide-arrows button:hover {
+  border-color: #7aab95;
+  background: #e8f2ec;
+  color: #174b3b;
+}
+html[data-theme="light"] .hero-photo-fallback {
+  color: #365d50;
+  background: radial-gradient(ellipse at 50% 45%, #e7f1eb, #f6f9f7 72%);
+}
+html[data-theme="light"] .risk-evidence {
+  border-left-color: #b9822d;
+  background: #fff5df;
+  color: #5d491f;
+}
+html[data-theme="light"] .flood-table th {
+  background: #eaf1ed;
+  color: #40594f;
+}
+html[data-theme="light"] .flood-table td {
+  color: #20332e;
+}
+html[data-theme="light"] .flood-table td,
+html[data-theme="light"] .flood-table th,
+html[data-theme="light"] .site-footer-bottom {
+  border-color: var(--ui-border);
+}
+html[data-theme="light"] .flood-list-controls input,
+html[data-theme="light"] .flood-list-controls select {
+  border-color: var(--ui-border);
+  background: var(--ui-input);
+  color: var(--ui-text);
+}
+html[data-theme="light"] .flood-list-controls input::placeholder {
+  color: var(--ui-muted);
+}
+html[data-theme="light"] .flood-pagination {
+  color: var(--ui-muted);
+}
+html[data-theme="light"] .flood-pagination button {
+  border-color: var(--ui-border);
+  background: var(--ui-raised);
+  color: var(--ui-secondary);
+}
+html[data-theme="light"] .flood-pagination button:hover:not(:disabled) {
+  background: #e8f2ec;
+  color: #174b3b;
+}
+html[data-theme="light"] .map-data-note {
+  border-color: var(--ui-border);
+  background: rgb(255 255 255 / 94%);
+  color: var(--ui-secondary);
+}
+html[data-theme="light"] .about-feature-grid article {
+  border-color: var(--ui-border);
+  background: var(--ui-surface);
+}
+html[data-theme="light"] .about-feature-grid article > svg {
+  color: #28735b;
+}
+html[data-theme="light"] .about-feature-grid h3,
+html[data-theme="light"] .site-footer-columns h2,
+html[data-theme="light"] .site-footer-brand strong {
+  color: var(--ui-heading);
+}
+html[data-theme="light"] .about-feature-grid p,
+html[data-theme="light"] .site-footer-columns a,
+html[data-theme="light"] .site-footer-columns button,
+html[data-theme="light"] .site-footer-brand > span:last-child,
+html[data-theme="light"] .site-footer-bottom p {
+  color: var(--ui-muted);
+}
+html[data-theme="light"] .about-limits {
+  border-color: var(--ui-border);
+  background: var(--ui-raised);
+}
+html[data-theme="light"] .about-limits p,
+html[data-theme="light"] .about-limits b {
+  color: var(--ui-secondary);
+}
+html[data-theme="light"] .auth-modal {
+  border-color: var(--ui-border);
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  box-shadow: 0 24px 64px rgb(32 51 46 / 20%);
+}
+html[data-theme="light"] .auth-modal h2,
+html[data-theme="light"] .auth-modal label {
+  color: var(--ui-heading);
+}
+html[data-theme="light"] .auth-description,
+html[data-theme="light"] .auth-switch {
+  color: var(--ui-muted);
+}
+html[data-theme="light"] .auth-modal input {
+  border-color: var(--ui-border);
+  background: var(--ui-input);
+  color: var(--ui-text);
+}
+html[data-theme="light"] .auth-modal input::placeholder {
+  color: var(--ui-muted);
+}
+html[data-theme="light"] .auth-close {
+  color: var(--ui-muted);
+}

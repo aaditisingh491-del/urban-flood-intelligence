@@ -128,7 +128,6 @@ function App() {
   const [activeHeroSlide, setActiveHeroSlide] = useState(0);
   const [heroAutoplayReset, setHeroAutoplayReset] = useState(0);
   const [heroImageFailures, setHeroImageFailures] = useState<Record<number, number>>({});
-  const [heroHovered, setHeroHovered] = useState(false);
   const [heroFocused, setHeroFocused] = useState(false);
   const [heroPageVisible, setHeroPageVisible] = useState(() => document.visibilityState === 'visible');
   const [heroReducedMotion, setHeroReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -149,12 +148,12 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (heroHovered || heroFocused || !heroPageVisible || heroReducedMotion) return;
+    if (heroFocused || !heroPageVisible || heroReducedMotion) return;
     const timer = window.setTimeout(() => {
       setActiveHeroSlide((current) => (current + 1) % heroSlides.length);
     }, 5000);
     return () => window.clearTimeout(timer);
-  }, [activeHeroSlide, heroAutoplayReset, heroFocused, heroHovered, heroPageVisible, heroReducedMotion]);
+  }, [activeHeroSlide, heroAutoplayReset, heroFocused, heroPageVisible, heroReducedMotion]);
 
 
   // Load dashboard data and restore the Cognito session, if one exists.
@@ -246,8 +245,6 @@ function App() {
         aria-label="FloodSense introduction"
         aria-roledescription="carousel"
         onKeyDown={handleHeroKeyDown}
-        onMouseEnter={() => setHeroHovered(true)}
-        onMouseLeave={() => setHeroHovered(false)}
         onFocusCapture={() => setHeroFocused(true)}
         onBlurCapture={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHeroFocused(false);
@@ -281,7 +278,7 @@ function App() {
                 <div className="hero-slide-controls" aria-label="Carousel controls">
                   <div className="hero-slide-indicators" aria-label="Choose slide">
                     {heroSlides.map((item, itemIndex) => (
-                      <button key={item.label} type="button" className={itemIndex === activeHeroSlide ? 'active' : ''} aria-label={`Go to slide ${itemIndex + 1}: ${item.label}`} aria-pressed={itemIndex === activeHeroSlide} onClick={() => { setActiveHeroSlide(itemIndex); setHeroAutoplayReset((current) => current + 1); if (itemIndex !== activeHeroSlide) setHeroFocused(false); }} />
+                      <button key={item.label} type="button" className={itemIndex === activeHeroSlide ? 'active' : ''} aria-label={`Go to slide ${itemIndex + 1}: ${item.label}`} aria-pressed={itemIndex === activeHeroSlide} onClick={() => { setActiveHeroSlide(itemIndex); setHeroAutoplayReset((current) => current + 1); setHeroFocused(false); }} />
                     ))}
                   </div>
                   <span className="hero-slide-count" aria-live="polite">{String(index + 1).padStart(2, '0')} <i>/</i> {String(heroSlides.length).padStart(2, '0')}</span>
@@ -294,7 +291,6 @@ function App() {
             </React.Fragment>
           );
         })}
-        <div className="hero-disclaimer"><span>LOCATION-LEVEL FLOOD INTELLIGENCE</span><span>DETERMINISTIC DEMO DATA · NOT AN OFFICIAL FORECAST</span></div>
       </section>
 
       <main id="dashboard">
