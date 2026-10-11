@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { CircleMarker, GeoJSON, MapContainer, Popup, TileLayer, useMapEvents } from 'react-leaflet';
 import type { LatLngExpression, LeafletMouseEvent } from 'leaflet';
-import { AlertTriangle, Navigation, Search, CloudRain } from 'lucide-react';
+import { Navigation, Search, CloudRain } from 'lucide-react';
 import SafetyAdvice from './SafetyAdvice';
+import type { EmergencyContext } from './EmergencyMode';
+import { compareRouteMetrics, recommendComparedRoute, routeDisplayNames, routeMetrics } from './routeComparison';
 import 'leaflet/dist/leaflet.css';
 import './flood-intelligence.css';
 import './flood-intelligence-controls.css';
@@ -15,7 +17,8 @@ type Suggestion = Point & { name: string };
 type ForecastSlot = { valid_at: string; precipitation_mm: number | null; precipitation_probability_percent: number | null; temperature_c: number | null; weather_code: number | null };
 type Forecast = { provider: string; attribution: string; timezone: string; generated_at: string; units: { precipitation: string; precipitation_probability: string; temperature: string }; slots: ForecastSlot[] };
 type Assessment = { location: { location_id: string; location_name: string; city: string; state: string; inventory_status: string; inventory_confidence: string; inventory_source: string; inventory_source_url: string; latitude: number; longitude: number }; model_score: number | null; model_category: string; model_status: string; model_warning: string; current_verified_incidents_within_1km: number; current_verified_incident_sources: string[]; assessed_at: string; data_source: string; forecast: Forecast | null; forecast_error: string | null };
-type RouteResult = { original_route: { geometry: GeoJSON.GeoJsonObject; distance_m?: number; duration_s?: number }; recommended_route: { geometry: GeoJSON.GeoJsonObject; distance_m?: number; duration_s?: number } | null; safe_route_verified: boolean; message: string; warnings: string[]; hazards_avoided: number; alternatives_considered: number };
+type RouteOption = { route_id: string; label: string; geometry: GeoJSON.GeoJsonObject; distance_m?: number; duration_s?: number; recommended: boolean; recommendation_reason: string; verified_current_hazard_count: number; verified_current_hazards: { location_name?: string; source_name?: string; source_url?: string; last_verified_at?: string }[]; nearby_vulnerability_count: number; nearby_vulnerability_locations: { location_name?: string; source_name?: string; source_url?: string }[]; route_evidence: string };
+type RouteResult = { original_route: { geometry: GeoJSON.GeoJsonObject; distance_m?: number; duration_s?: number }; recommended_route: { geometry: GeoJSON.GeoJsonObject; distance_m?: number; duration_s?: number; route_id?: string } | null; route_options: RouteOption[]; selected_route_id: string; fresh_verified_reports_available?: boolean; safe_route_verified: false; message: string; warnings: string[]; hazards_avoided: number; alternatives_considered: number; data_source: string; data_fetched_at: string };
 const fmt = (value?: number) => value == null ? '—' : `${(value / 1000).toFixed(1)} km`;
 const duration = (value?: number) => value == null ? '—' : `${Math.round(value / 60)} min`;
 
@@ -33,7 +36,7 @@ function validLine(route?: RouteResult['original_route'] | RouteResult['recommen
     (route.duration_s == null || (Number.isFinite(route.duration_s) && route.duration_s >= 0));
 }
 
-export default function FloodIntelligence() {
+export default function FloodIntelligence({ onEmergencyContextChange }: { onEmergencyContextChange?: (context: EmergencyContext) => void }) {
   const [records, setRecords] = useState<RecordRow[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
 
@@ -54,6 +57,7 @@ export default function FloodIntelligence() {
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [searchNotice, setSearchNotice] = useState('');
   const [route, setRoute] = useState<RouteResult | null>(null);
+  const [selectedRouteId, setSelectedRouteId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const searchTimer = useRef<number | undefined>(undefined);
@@ -62,6 +66,16 @@ export default function FloodIntelligence() {
     fetch(`${API_BASE}/api/floods/summary`).then(r => r.ok ? r.json() : null).then(setSummary).catch(() => setSummary(null));
     fetch(`${API_BASE}/api/service-area`).then(r => r.ok ? r.json() : null).then(setServiceArea).catch(() => setServiceArea(null));
   }, []);
+  useEffect(() => {
+    onEmergencyContextChange?.({
+      sourceName: origin?.name,
+      destinationName: destination?.location_name,
+      verifiedIncidentCount: assessment?.current_verified_incidents_within_1km,
+      forecastGeneratedAt: assessment?.forecast?.generated_at,
+      forecastProvider: assessment?.forecast?.provider,
+      dataUnavailable: Boolean(assessmentError || inventoryError || assessment?.forecast_error || (destination && !assessmentLoading && !assessment)),
+    });
+  }, [onEmergencyContextChange, origin, destination, assessment, assessmentError, inventoryError, assessmentLoading]);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -149,14 +163,24 @@ export default function FloodIntelligence() {
     try {
       const response = await fetch(`${API_BASE}/api/routes/alternate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ origin: { latitude: origin.latitude, longitude: origin.longitude }, destination_location_id: destination.location_id, travel_mode: 'driving' }) });
       const body = await response.json(); if (!response.ok) throw new Error(body.detail || 'No route is available from the routing provider. Please retry.');
-      if (!body?.original_route || !validLine(body.original_route) || !validLine(body.recommended_route) || !Array.isArray(body.warnings) || typeof body.message !== 'string') throw new Error('The routing provider returned an incomplete or invalid route response. Please retry.');
+      if (!body?.original_route || !validLine(body.original_route) || !validLine(body.recommended_route) || !Array.isArray(body.route_options) || body.route_options.length < 1 || body.route_options.length > 3 || body.route_options.some((option: RouteOption) => !option.route_id || !validLine(option)) || !Array.isArray(body.warnings) || typeof body.message !== 'string' || !body.route_options.some((option: RouteOption) => option.route_id === body.selected_route_id)) throw new Error('The routing provider returned incomplete or invalid route options. Please retry.');
       await assessmentPromise;
-      if (routeToken === routeRequest.current && destinationId === destination.location_id) setRoute(body);
+      if (routeToken === routeRequest.current && destinationId === destination.location_id) { setRoute(body); setSelectedRouteId(body.selected_route_id); }
     } catch (e) { if (routeToken === routeRequest.current) setError(e instanceof Error ? e.message : 'Route service unavailable.'); }
     finally { if (routeToken === routeRequest.current) setBusy(false); }
   }
 
   const mapCenter: LatLngExpression = origin ? [origin.latitude, origin.longitude] : [12.9716, 77.5946];
+  const selectedRoute = route?.route_options.find(option => option.route_id === selectedRouteId) || route?.route_options[0] || null;
+  const comparisonAlternative = route?.route_options.find(option => option.route_id !== selectedRoute?.route_id && option.recommended)
+    || route?.route_options.find(option => option.route_id !== selectedRoute?.route_id) || null;
+  const routeRecommendation = selectedRoute ? recommendComparedRoute(selectedRoute, comparisonAlternative, route?.fresh_verified_reports_available) : null;
+  const selectedRouteIndex = selectedRoute ? route!.route_options.indexOf(selectedRoute) : 0;
+  const alternativeRouteIndex = comparisonAlternative ? route!.route_options.indexOf(comparisonAlternative) : 0;
+  const routeNames = route ? routeDisplayNames(route.route_options) : [];
+  const selectedRouteName = routeNames[selectedRouteIndex] || '';
+  const comparisonAlternativeName = routeNames[alternativeRouteIndex] || '';
+  const routeColors = ['#e58a18', '#4878d0'];
   return <section className="flood-intelligence" aria-label="Flood intelligence and risk-aware routing">
     <div className="flood-heading"><div><span className="eyebrow">FLOOD INTELLIGENCE</span><h2>Bengaluru route planner</h2><p>Choose an origin and an inventory destination. Vulnerability points are not current incident reports.</p></div><small>{summary?.storage_mode === 'dynamodb' ? 'DynamoDB connected' : 'Bengaluru service area'}</small></div>
     <div className="route-inputs">
@@ -170,17 +194,42 @@ export default function FloodIntelligence() {
     </div>
     <p className="route-map-instruction">The map shows vulnerability points and routes. Click inside the Bengaluru service area to select the source; map clicks never set a destination.</p>
     {inventoryError && <p className="flood-error" role="alert">{inventoryError}</p>}
-    {error && <p className="flood-error" role="alert">{error}<button onClick={() => setError('')}>Dismiss</button></p>}
+    {error && <p className="flood-error" role="alert">{error}<button type="button" onClick={() => setError('')}>Dismiss</button><button type="button" onClick={() => void calculateRoute()} disabled={busy || !origin || !destination}>Retry</button></p>}
     <div className="flood-map"><MapContainer center={mapCenter} zoom={12} scrollWheelZoom zoomControl className="interactive-map" aria-label="Flood inventory and route display map">
       <MapSourceClick onSelect={chooseMapSource}/><TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
       {serviceArea && <GeoJSON data={serviceArea} style={{ color: '#73b8a8', weight: 2, fillOpacity: .04, dashArray: '5 4' }} />}
       {records.map(r => { const color = r.status === 'active' ? (r.severity === 'critical' || r.severity === 'high' ? '#e98570' : '#e2b56e') : r.event_type === 'historical_flood' ? '#82afcb' : r.event_type === 'rainfall_based_risk' ? '#9c8ad1' : '#e2b56e'; return <CircleMarker key={r.location_id} center={[r.latitude, r.longitude]} radius={r.status === 'active' ? 7 : 5} pathOptions={{ color, fillColor: color, fillOpacity: .68, weight: 1 }}><Popup><strong>{r.location_name}</strong><br/>{r.city}, {r.state}<br/>{r.event_type.replace(/_/g, ' ')} · {r.status}<br/>Severity: {r.severity || 'not supplied'} · Confidence: {r.confidence}<br/>Observed: {r.observed_at || 'not supplied'} · Retrieved: {r.last_verified_at || 'not verified'}<br/><a href={r.source_url} target="_blank" rel="noreferrer">{r.source_name}</a></Popup></CircleMarker>; })}
       {origin && <CircleMarker center={[origin.latitude, origin.longitude]} radius={8} pathOptions={{ color: '#73b8a8', fillColor: '#73b8a8', fillOpacity: .95 }}><Popup>Selected origin</Popup></CircleMarker>}
       {destination && <CircleMarker center={[destination.latitude, destination.longitude]} radius={8} pathOptions={{ color: '#82afcb', fillColor: '#82afcb', fillOpacity: .95 }}><Popup>Selected destination</Popup></CircleMarker>}
-      {route && <GeoJSON data={route.original_route.geometry} style={{ color: '#c1cbd0', weight: 4, opacity: .7, dashArray: '7 7' }} />}
-      {route?.recommended_route && <GeoJSON data={route.recommended_route.geometry} style={{ color: '#73b8a8', weight: 5, opacity: .9 }} />}
+      {route?.route_options.filter(option => option.route_id !== selectedRouteId).map(option => <GeoJSON key={option.route_id} data={option.geometry} style={{ color: routeColors[route.route_options.indexOf(option) % routeColors.length], weight: 4, opacity: .82, dashArray: '6 5' }} />)}
+      {selectedRoute && <GeoJSON key={`selected-${selectedRoute.route_id}`} data={selectedRoute.geometry} style={{ color: '#00a37a', weight: 7, opacity: .98 }} />}
     </MapContainer></div><div className="flood-map-legend"><span><i className="legend-exposure"/>Vulnerability inventory</span><span><i className="legend-active"/>Active verified incident</span><span><i className="legend-history"/>Historical</span><span><i className="legend-risk"/>Modeled risk</span><span><i className="legend-origin"/>Origin</span><span><i className="legend-destination"/>Destination</span><span><i className="legend-route"/>Route</span></div>
-    {route && <div className={`route-result ${route.safe_route_verified ? 'route-result-ok' : ''}`}><AlertTriangle size={18}/><div><h3>Why this road is dangerous</h3><strong>{route.message}</strong><p>Route analysis for {destination?.location_name}, {destination?.city}. This inventory marks flood vulnerability and does not establish that this road is currently flooded or closed.</p><p>{route.recommended_route ? `${fmt(route.recommended_route.distance_m)} · ${duration(route.recommended_route.duration_s)} recommended candidate${route.original_route.distance_m != null && route.recommended_route.distance_m != null ? ` · ${fmt(route.recommended_route.distance_m - route.original_route.distance_m)} additional distance` : ''}${route.original_route.duration_s != null && route.recommended_route.duration_s != null ? ` · ${Math.round((route.recommended_route.duration_s - route.original_route.duration_s) / 60)} additional minutes` : ''}` : `No verified clear route · fastest candidate shown as a dashed reference (${fmt(route.original_route.distance_m)} · ${duration(route.original_route.duration_s)})`} · {route.alternatives_considered} candidate(s) · {route.hazards_avoided} mapped hazards avoided</p>{route.warnings.map(w => <small key={w}>{w}</small>)}</div></div>}
+    {route && selectedRoute && <section className="route-comparison" aria-label="Flood-aware route comparison">
+      <div className="route-comparison-head"><div><h3>Via {selectedRouteName.replace(/^Via\s+/i, '')}</h3><p>Selected provider route. Choosing another option updates this comparison and the map highlight. No route is confirmed safe.</p></div><span>{route.route_options.length} provider option{route.route_options.length === 1 ? '' : 's'} · {route.data_source}</span></div>
+      {route.route_options.length === 1 ? <p className="route-comparison-summary" role="status"><strong>Only one route available — alternatives could not be compared.</strong><br/>{routeMetrics(selectedRoute)}</p> : <>
+        <label className="route-select-label" htmlFor="display-route">Current selected route</label>
+        <select id="display-route" className="route-select" value={selectedRoute.route_id} onChange={event => setSelectedRouteId(event.target.value)} aria-label="Select current route to display">
+          {route.route_options.map((option, index) => <option key={option.route_id} value={option.route_id}>{routeNames[index]} · {routeMetrics(option)}</option>)}
+        </select>
+        <div className="route-comparison-pair">
+          <p><strong>Current route: {selectedRouteName}</strong><span>{routeMetrics(selectedRoute)}</span></p>
+          {comparisonAlternative ? <p><strong>Alternative route: {comparisonAlternativeName}</strong><span>{routeMetrics(comparisonAlternative)}</span></p> : null}
+        </div>
+        {comparisonAlternative && <p className="route-comparison-difference">Compared with {comparisonAlternativeName}: {compareRouteMetrics(selectedRoute, comparisonAlternative)}</p>}
+        {routeRecommendation && <div className="route-comparison-summary"><strong>{routeRecommendation.label}</strong><p>{routeRecommendation.reason}</p></div>}
+      </>}
+      {route.fresh_verified_reports_available === false && <p className="route-comparison-evidence">No fresh verified flood reports available for comparison.</p>}
+      <div className="route-evidence-grid">
+        {[{ title: 'Current route evidence', option: selectedRoute }, ...(comparisonAlternative ? [{ title: 'Alternative route evidence', option: comparisonAlternative }] : [])].map(({ title, option }) => <div className="route-evidence-column" key={`${title}-${option.route_id}`}>
+          <h4>{title}</h4>
+          <p><strong>Fresh verified reports:</strong> {option.verified_current_hazard_count ? `${option.verified_current_hazard_count} mapped near this route` : route.fresh_verified_reports_available === false ? 'Unavailable for comparison' : 'None mapped near this route; missing reports do not establish safety'}.</p>
+          {option.verified_current_hazards.map((hazard, index) => <p className="route-evidence-source" key={`${option.route_id}-source-${index}`}>{hazard.location_name || 'Flood report'}{hazard.source_name ? ` · ${hazard.source_name}` : ''}{hazard.last_verified_at ? ` · verified ${new Date(hazard.last_verified_at).toLocaleString()}` : ''}{hazard.source_url ? <> · <a href={hazard.source_url} target="_blank" rel="noreferrer">View source</a></> : ''}</p>)}
+          <p><strong>Static vulnerability context:</strong> {option.nearby_vulnerability_count} point{option.nearby_vulnerability_count === 1 ? '' : 's'}{option.nearby_vulnerability_locations.length ? ` · ${option.nearby_vulnerability_locations.map(point => point.location_name).filter(Boolean).join(', ')}` : ''}. Context only, not a current incident or road condition.</p>
+        </div>)}
+      </div>
+      <p className="route-comparison-limit">Destination forecast is shown once below and is not a road-level flood measurement.</p>
+      <div className="route-danger-context"><div><h4>Why this road is dangerous</h4><p>{selectedRoute.verified_current_hazard_count ? `${selectedRoute.verified_current_hazard_count} fresh verified point report(s) are mapped near this candidate. Check the linked source and current official road guidance; point screening cannot confirm road conditions.` : 'No fresh verified flood reports are mapped near this candidate; missing reports do not prove safety. Vulnerability inventory is static context, not a current incident.'}</p><p>Analysis for {destination?.location_name}, {destination?.city}. Destination forecast is not a road-level flood measurement.</p>{route.warnings.map(w => <small key={w}>{w}</small>)}</div></div>
+    </section>}
     <div className="destination-insights">
       <section className="destination-risk-card" aria-live="polite" aria-label="Destination risk assessment">
         <p className="insight-eyebrow">DESTINATION RISK</p>

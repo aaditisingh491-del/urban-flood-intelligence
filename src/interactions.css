@@ -14,6 +14,7 @@
 .auth-overlay{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:20px;background:#10271fcc;backdrop-filter:blur(5px);animation:auth-fade-in .18s ease-out}
 .auth-modal{position:relative;width:min(100%,440px);max-height:min(92vh,760px);overflow:auto;padding:36px;background:#fff;border:1px solid #dce7df;border-radius:8px;box-shadow:0 24px 80px #10271f55;animation:auth-rise-in .22s ease-out}
 .auth-close{position:absolute;top:13px;right:14px;width:34px;height:34px;display:grid;place-items:center;border:0;border-radius:50%;background:transparent;color:#65796e;font-size:25px;cursor:pointer}
+.auth-back{min-height:36px;margin:0 0 16px;padding:6px 11px;border:1px solid #cbd9d1;border-radius:6px;background:#f6f9f7;color:#20332e;font-weight:700;cursor:pointer}
 .auth-close:hover{background:#f0f5f1;color:#173a2d}
 .auth-eyebrow{margin:0 0 10px;color:#398063;font-size:10px;font-weight:700;letter-spacing:1px}
 .auth-modal h2{margin:0;color:#18392e;font:700 28px Manrope,sans-serif;letter-spacing:0}
@@ -224,6 +225,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .about-demo-note{margin:18px 0 0;color:#74858d;font-size:9px;line-height:1.6}
 @media(max-width:700px){.hero-photo img{height:280px}}
 @media(max-width:380px){.topbar{gap:8px}.top-nav{display:flex;gap:8px}.top-nav a{font-size:9px}.top-actions{gap:6px}.profile-trigger{width:36px;height:36px}.hero-photo img{height:235px}}
+@media(max-width:560px){.topbar{height:auto;min-height:60px;flex-wrap:wrap;padding:8px 12px!important;gap:8px!important}.topbar .brand{margin-right:auto}.topbar .top-actions{gap:5px}.topbar .top-nav{order:3;flex:1 0 100%;justify-content:space-around;gap:12px;margin-left:0}.topbar .top-nav a[href="#about"]{display:none}.topbar .emergency-mode-trigger{width:42px;min-width:42px;padding:0;font-size:0}.topbar .emergency-mode-trigger span{display:none}}
 
 /* Hero carousel and About footer */
 .hero-carousel{isolation:isolate}

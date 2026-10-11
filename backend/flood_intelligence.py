@@ -270,16 +270,34 @@ def _route(origin: dict[str, float], destination: dict[str, float], mode: str) -
             if wait > 0:
                 time.sleep(wait)
             response = httpx.get(f"{OSRM_URL}/route/v1/{profile}/{coordinates}",
-                                 params={"alternatives": "true", "overview": "full", "geometries": "geojson", "steps": "false"},
+                                 params={"alternatives": "true", "overview": "full", "geometries": "geojson", "steps": "true"},
                                  headers={"User-Agent": "UrbanFloodIntelligence/0.1 (risk-aware route demo)"}, timeout=12)
             _OSRM_LAST_REQUEST = time.monotonic()
+        if response.status_code == 429:
+            raise HTTPException(status_code=429, detail="The routing provider is rate limiting requests. Wait briefly and retry.")
         response.raise_for_status()
-        payload = response.json()
-        if payload.get("code") != "Ok":
+        try:
+            payload = response.json()
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(status_code=502, detail="The routing provider returned malformed JSON. Please retry.") from exc
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=502, detail="The routing provider returned an invalid route response. Please retry.")
+        if payload.get("code") in {"NoRoute", "NoSegment"}:
             return []
-        return payload.get("routes", [])
-    except httpx.HTTPError:
-        return []
+        if payload.get("code") != "Ok":
+            raise HTTPException(status_code=502, detail="The routing provider could not calculate this route. Please retry.")
+        routes = payload.get("routes")
+        if not isinstance(routes, list):
+            raise HTTPException(status_code=502, detail="The routing provider returned an invalid route list. Please retry.")
+        return routes
+    except HTTPException:
+        raise
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="The routing provider timed out. Please retry.") from exc
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=503, detail="The routing provider is temporarily unavailable. Please retry.") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail="The routing provider is unavailable. Please retry.") from exc
 
 
 def _project_bengaluru(lon: float, lat: float) -> tuple[float, float]:
@@ -292,10 +310,12 @@ def validate_route_candidate(route: dict[str, Any], origin: dict[str, float], de
     try:
         geometry = route["geometry"]
         coords = geometry["coordinates"]
-        distance, duration = float(route["distance"]), float(route["duration"])
+        distance = float(route["distance"]) if route.get("distance") is not None else None
+        duration = float(route["duration"]) if route.get("duration") is not None else None
         if geometry.get("type") != "LineString" or len(coords) < 2:
             return False
-        if not (math.isfinite(distance) and distance >= 0 and math.isfinite(duration) and duration >= 0):
+        if ((distance is not None and (not math.isfinite(distance) or distance < 0))
+                or (duration is not None and (not math.isfinite(duration) or duration < 0))):
             return False
         points = []
         for pair in coords:
@@ -328,63 +348,155 @@ def alternate_route(body: dict[str, Any], records: list[dict[str, Any]]) -> dict
         point = body[field]
         if not is_in_bengaluru(float(point["latitude"]), float(point["longitude"])):
             raise HTTPException(status_code=422, detail=f"{field.capitalize()} must be within Bengaluru.")
-    routes = _route(body["origin"], body["destination"], mode)
-    if not routes:
-        raise HTTPException(status_code=503, detail="Routing provider returned no route candidates")
-    valid_routes = [route for route in routes if validate_route_candidate(route, body["origin"], body["destination"])]
-    rejected_geometry_count = len(routes) - len(valid_routes)
+    returned_routes = _route(body["origin"], body["destination"], mode)
+    if not returned_routes:
+        raise HTTPException(status_code=404, detail="The routing provider found no route for these Bengaluru locations. Please adjust the source or retry.")
+    valid_routes = [route for route in returned_routes if validate_route_candidate(route, body["origin"], body["destination"])]
+    rejected_geometry_count = len(returned_routes) - len(valid_routes)
     if not valid_routes:
-        raise HTTPException(status_code=502, detail="Routing provider returned invalid geometry or a route outside the Bengaluru service area. Please retry.")
-    routes = valid_routes
+        raise HTTPException(status_code=502, detail="The routing provider returned invalid geometry or a route outside the Bengaluru service area. Please retry.")
 
-    # Only fresh, explicitly verified active incident/alert points are hazards.
-    # The bundled locality inventory does not meet this bar and is contextual only.
+    # Remove duplicate geometries before presenting alternatives. The primary provider
+    # order is retained; OSRM can legitimately return fewer than three candidates.
+    routes: list[dict[str, Any]] = []
+    seen_geometry: set[tuple[tuple[float, float], ...]] = set()
+    for candidate in valid_routes:
+        key = tuple((round(float(point[0]), 5), round(float(point[1]), 5))
+                    for point in candidate["geometry"]["coordinates"])
+        if key not in seen_geometry:
+            seen_geometry.add(key)
+            routes.append(candidate)
+    routes = routes[:3]
+
+    # Only fresh, explicitly verified active incident/alert points are considered
+    # current hazards. Static vulnerability inventory is shown as route context.
     active = verified_active_records(records)
-    buffer_m = max(100, min(5000, int(os.getenv("FLOOD_HAZARD_BUFFER_METERS", "500"))))
-    def overlaps(route: dict[str, Any]) -> list[dict[str, Any]]:
-        coords = route.get("geometry", {}).get("coordinates", [])
-        if len(coords) < 2:
-            return []
+    known_active_ids = {id(item) for item in active}
+    stale_or_unverified_incident_count = sum(
+        1 for record in records
+        if record.get("event_type") in {"observed_flood", "official_flood_alert"}
+        and id(record) not in known_active_ids
+    )
+    hazard_buffer_m = max(100, min(5000, int(os.getenv("FLOOD_HAZARD_BUFFER_METERS", "500"))))
+    context_buffer_m = max(100, min(5000, int(os.getenv("FLOOD_INVENTORY_CONTEXT_BUFFER_METERS", "500"))))
+
+    def route_line_meters(route: dict[str, Any]) -> LineString:
+        coords = route["geometry"]["coordinates"]
+        return LineString([_project_bengaluru(float(lon), float(lat)) for lon, lat, *_ in coords])
+
+    def nearby(route: dict[str, Any], source_records: list[dict[str, Any]], radius_m: int) -> list[dict[str, Any]]:
+        road = route_line_meters(route)
         hits = []
-        for record in active:
-            center_lat = float(record["latitude"])
-            scale_x = max(0.01, math.cos(math.radians(center_lat)))
-            road = LineString([(lon * scale_x, lat) for lon, lat, *_ in coords])
-            center = Point(float(record["longitude"]) * scale_x, center_lat)
-            buffer_degrees = buffer_m / 111_320
-            if road.distance(center) <= buffer_degrees:
-                hits.append(record)
+        for record in source_records:
+            try:
+                point = Point(_project_bengaluru(float(record["longitude"]), float(record["latitude"])))
+                if road.distance(point) <= radius_m:
+                    hits.append(record)
+            except (KeyError, TypeError, ValueError):
+                continue
         return hits
-    evaluated = [(r, overlaps(r)) for r in routes]
-    viable = [(r, h) for r, h in evaluated if not h]
-    original = min(evaluated, key=lambda item: item[0].get("duration", float("inf")))[0]
-    original_hazards = overlaps(original)
-    selected_pair = min(viable, key=lambda item: item[0].get("duration", float("inf"))) if viable else None
-    selected, hazards = selected_pair if selected_pair else (original, original_hazards)
-    # Point reports do not provide road-closure polygons or complete road conditions;
-    # therefore this system never claims a route has been verified safe.
-    safe = False
-    rejected = [{"distance_m": route.get("distance"), "duration_s": route.get("duration"),
+
+    evaluated = []
+    for index, route in enumerate(routes):
+        verified_hits = nearby(route, active, hazard_buffer_m)
+        inventory_hits = nearby(route, [r for r in records if r.get("event_type") == "exposure_location"], context_buffer_m)
+        evaluated.append({"route": route, "index": index, "hazards": verified_hits, "inventory": inventory_hits})
+
+    viable = [item for item in evaluated if not item["hazards"]]
+    def provider_duration(item: dict[str, Any]) -> float:
+        try:
+            value = float(item["route"].get("duration"))
+            return value if math.isfinite(value) and value >= 0 else float("inf")
+        except (TypeError, ValueError):
+            return float("inf")
+    recommendation = min(viable, key=provider_duration) if viable else None
+    primary = routes[0]
+    selected = recommendation["route"] if recommendation else primary
+    primary_hazards = next(item["hazards"] for item in evaluated if item["route"] is primary)
+    candidate_options = []
+
+    def route_label(route: dict[str, Any], index: int) -> str:
+        names: list[str] = []
+        for segment in route.get("legs", []) if isinstance(route.get("legs"), list) else []:
+            for step in segment.get("steps", []) if isinstance(segment, dict) and isinstance(segment.get("steps"), list) else []:
+                if not isinstance(step, dict):
+                    continue
+                road = step.get("name") or step.get("ref")
+                if isinstance(road, str) and road.strip() and road.strip() not in names:
+                    names.append(road.strip())
+        if names:
+            return f"Via {names[0]}"
+        return f"Route {chr(ord('A') + index)}"
+
+    for item in evaluated:
+        route = item["route"]
+        is_recommended = recommendation is item and len(evaluated) > 1
+        if len(evaluated) == 1 and recommendation is item:
+            reason = "Only route returned by the routing provider; alternatives could not be compared."
+        elif is_recommended and active and math.isfinite(provider_duration(item)):
+            best_duration = provider_duration(item)
+            tied = sum(provider_duration(candidate) == best_duration for candidate in viable) > 1
+            reason = ("Selected by provider order among routes with equal estimated travel time; it avoids mapped fresh verified incident points." if tied else
+                      "Shortest estimated travel time among candidates outside mapped fresh verified incident buffers.")
+        elif is_recommended and active:
+            reason = "Selected by provider order among candidates outside mapped fresh verified incident buffers; travel time is unavailable."
+        elif is_recommended and math.isfinite(provider_duration(item)):
+            best_duration = provider_duration(item)
+            tied = sum(provider_duration(candidate) == best_duration for candidate in evaluated) > 1
+            reason = ("Selected by provider order; available travel times are equal." if tied else
+                      "Lowest estimated travel time among available candidates.")
+        elif is_recommended:
+            reason = "Selected by provider order; travel time is unavailable."
+        elif item["hazards"]:
+            reason = "This candidate passes within the configured screening buffer of a fresh verified flood report. Avoid relying on it without checking official road guidance."
+        else:
+            reason = "Available routing-provider alternative. No road-level safety verification is available."
+        candidate_options.append({
+            "route_id": f"route-{item['index'] + 1}",
+            "label": route_label(route, item["index"]),
+            "geometry": route["geometry"],
+            "distance_m": route.get("distance"),
+            "duration_s": route.get("duration"),
+            "recommended": is_recommended,
+            "recommendation_reason": reason,
+            "verified_current_hazard_count": len(item["hazards"]),
+            "verified_current_hazards": [{"location_name": h.get("location_name"), "source_name": h.get("source_name"),
+                                           "source_url": h.get("source_url"), "last_verified_at": h.get("last_verified_at")}
+                                          for h in item["hazards"]],
+            "nearby_vulnerability_count": len(item["inventory"]),
+            "nearby_vulnerability_locations": [{"location_name": h.get("location_name"), "source_name": h.get("source_name"),
+                                                 "source_url": h.get("source_url")}
+                                                for h in item["inventory"][:5]],
+            "route_evidence": "Fresh verified report screening uses configured point buffers; nearby inventory points are historical/static context only.",
+        })
+
+    rejected = [{"distance_m": item["route"].get("distance"), "duration_s": item["route"].get("duration"),
                  "reason": "Intersects configured buffer around a fresh verified flood hazard.",
-                 "hazard_locations": [h.get("location_name") for h in hits]}
-                for route, hits in evaluated if hits]
+                 "hazard_locations": [h.get("location_name") for h in item["hazards"]]}
+                for item in evaluated if item["hazards"]]
+    warnings = ["Vulnerability inventory locations are static context and are not current flood incidents or road closures.",
+                f"Verified incident points use a {hazard_buffer_m} m screening buffer; this is not road-level closure data.",
+                "Weather forecasts describe destination-area weather, not conditions along each road segment.",
+                "No verified shelter or road-accessible safe-point dataset is configured.",
+                "No fresh verified flood reports were available for this request; absence of reports does not establish safety." if not active else "Mapped verified flood coverage may be incomplete; check official road and emergency updates.",
+                f"{stale_or_unverified_incident_count} stale or unverified flood/alert record(s) were excluded from active hazard screening." if stale_or_unverified_incident_count else "No stale or unverified flood/alert records were present.",
+                f"{rejected_geometry_count} route candidate(s) were rejected because their geometry or endpoints were invalid/outside the Bengaluru service area." if rejected_geometry_count else "All returned route geometries passed Bengaluru-area and endpoint checks."]
     return {
-        "original_route": {"geometry": original["geometry"], "distance_m": original.get("distance"), "duration_s": original.get("duration")},
-        # A viable route can be a preferred candidate without being verified safe.
-        "recommended_route": ({"geometry": selected["geometry"], "distance_m": selected.get("distance"), "duration_s": selected.get("duration")} if selected_pair is not None else None),
+        "original_route": {"geometry": primary["geometry"], "distance_m": primary.get("distance"), "duration_s": primary.get("duration")},
+        "recommended_route": ({"geometry": recommendation["route"]["geometry"],
+                               "distance_m": recommendation["route"].get("distance"),
+                               "duration_s": recommendation["route"].get("duration"),
+                               "route_id": f"route-{recommendation['index'] + 1}"} if recommendation else None),
+        "route_options": candidate_options,
+        "fresh_verified_reports_available": bool(active),
+        "selected_route_id": f"route-{recommendation['index'] + 1}" if recommendation else "route-1",
         "distance_m": selected.get("distance"), "duration_s": selected.get("duration"),
-        "alternatives_considered": len(routes), "hazards_avoided": max(0, len(original_hazards) - len(hazards)),
+        "alternatives_considered": len(candidate_options), "hazards_avoided": max(0, len(primary_hazards) - (len(recommendation["hazards"]) if recommendation else len(primary_hazards))),
         "rejected_routes": len(rejected), "rejected_route_reasons": rejected,
         "hazard_proximity_warnings": [{"location_name": r.get("location_name"), "source_name": r.get("source_name"),
-                                        "source_url": r.get("source_url")} for r in hazards],
-        "nearby_alternatives": [],
-        "safe_route_verified": safe,
-        "message": ("A risk-aware candidate avoids the mapped active verified flood points, but road conditions are not verified and this is not a safety guarantee."
-                    if selected_pair is not None and active else "Routing provider returned a route, but there is no verified current flood data to determine road safety. Follow official emergency guidance."),
-        "warnings": ["Vulnerability inventory records are contextual only and are not treated as live closures.",
-                     f"Point hazards use a {buffer_m} m screening buffer; road-level conditions and unnamed hazards are not represented.",
-                     "No verified shelter or road-accessible safe-point dataset is configured.",
-                     "No mapped active verified incidents are currently available." if not active else "Flood data coverage is incomplete.",
-                     f"{rejected_geometry_count} route candidate(s) were rejected because their geometry or endpoints were invalid/outside the Bengaluru service area." if rejected_geometry_count else "All returned candidate route geometries passed Bengaluru-area and endpoint checks."],
-        "data_source": "OSRM / OpenStreetMap", "data_fetched_at": utc_now(),
+                                        "source_url": r.get("source_url")} for r in (recommendation["hazards"] if recommendation else primary_hazards)],
+        "nearby_alternatives": [], "safe_route_verified": False,
+        "message": ("A recommended candidate avoids the mapped fresh verified flood points, but road conditions are not verified and this is not a safety guarantee."
+                    if recommendation and active else "Routes are shown as provider options, but no fresh verified flood data is available to determine road safety. Follow official emergency guidance."),
+        "warnings": warnings, "data_source": "OSRM / OpenStreetMap", "data_fetched_at": utc_now(),
     }

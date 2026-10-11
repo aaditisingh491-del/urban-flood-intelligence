@@ -45,7 +45,7 @@ class ProviderRateLimitMiddleware(BaseHTTPMiddleware):
         self.requests: dict[str, list[float]] = {}
 
     async def dispatch(self, request, call_next):
-        if request.url.path not in {"/api/geocode", "/api/routes/alternate"} and not request.url.path.endswith("/assessment"):
+        if request.url.path not in {"/api/geocode", "/api/routes/alternate", "/api/locations/forecast"} and not request.url.path.endswith("/assessment"):
             return await call_next(request)
         key = request.client.host if request.client else "unknown"
         now = time.monotonic()
@@ -181,6 +181,18 @@ def validate_location(coordinates: Coordinates):
         raise HTTPException(status_code=422, detail="Please select a location within Bengaluru.")
     return {"valid": True, "latitude": coordinates.latitude, "longitude": coordinates.longitude,
             "service_area": "Bengaluru, Karnataka, India"}
+
+
+@app.get("/api/locations/forecast")
+def location_forecast(latitude: float = Query(ge=-90, le=90), longitude: float = Query(ge=-180, le=180)):
+    """Return real hourly Open-Meteo data only for a point in the supported Bengaluru area."""
+    if not is_in_bengaluru(latitude, longitude):
+        raise HTTPException(status_code=422, detail="Forecast locations must be within Bengaluru.")
+    try:
+        forecast = get_destination_forecast(latitude, longitude)
+    except Exception:
+        raise HTTPException(status_code=502, detail="Open-Meteo forecast is unavailable for this location. Retry later.") from None
+    return {"latitude": latitude, "longitude": longitude, "forecast": forecast}
 
 
 @app.get("/api/floods")

@@ -10,5 +10,8 @@ describe('theme safety advice styles', () => {
     expect(css).toContain('--advice-background: #111b23');
     expect(css).toContain('.home-safety-panel .advice summary:focus-visible');
     expect(css).toContain('.home-safety-panel .advice:hover');
+    const routeCss = readFileSync(resolve(process.cwd(), 'src/themes.css'), 'utf8');
+    expect(routeCss).toContain('html[data-theme=\"light\"] .route-option.selected');
+    expect(routeCss).toContain('html[data-theme=\"dark\"] .route-result strong');
   });
 });

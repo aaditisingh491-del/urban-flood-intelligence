@@ -1,8 +1,7 @@
 
 
-import React, { useEffect, useState } from 'react';
-
 import './cognito';
+import React, { useEffect, useState } from 'react';
 
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom';
@@ -56,12 +55,15 @@ import './style.css';
 
 import './interactions.css';
 
-import AuthModal from './AuthModal';
+import SignInPage from './SignInPage';
 import FloodIntelligence from './FloodIntelligence';
 import ExplorePage from './ExplorePage';
+import SmartAlerts from './SmartAlerts';
 import ThemeToggle, { ThemeProvider } from './theme';
+import EmergencyModeControl, { type EmergencyContext } from './EmergencyMode';
 
 import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
+import { cognitoIsConfigured } from './cognito';
 
 type AppUser = {
   username: string;
@@ -124,7 +126,6 @@ const heroSlides = [
 
 function App() {
 
-  const [authOpen, setAuthOpen] = useState(false);
   const [activeHeroSlide, setActiveHeroSlide] = useState(0);
   const [heroAutoplayReset, setHeroAutoplayReset] = useState(0);
   const [heroImageFailures, setHeroImageFailures] = useState<Record<number, number>>({});
@@ -132,6 +133,7 @@ function App() {
   const [heroPageVisible, setHeroPageVisible] = useState(() => document.visibilityState === 'visible');
   const [heroReducedMotion, setHeroReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
+  const [emergencyContext, setEmergencyContext] = useState<EmergencyContext>({});
 
 
   useEffect(() => {
@@ -164,6 +166,7 @@ function App() {
 
     const restoreUser = async () => {
       try {
+        if (!cognitoIsConfigured) return;
         const user = await getCurrentUser();
         const attributes = await fetchUserAttributes();
 
@@ -229,13 +232,15 @@ function App() {
 
         <nav className="top-nav" aria-label="Main navigation">
           <Link to="/explore">Explore</Link>
+          <Link to="/alerts">Smart Alerts</Link>
           <a href="#about">About</a>
         </nav>
         <div className="top-actions">
           <ThemeToggle />
-          <button type="button" className="avatar profile-trigger" onClick={() => setAuthOpen(true)} aria-label="Login / Sign Up" title={currentUser ? `Account: ${currentUser.username}` : 'Login / Sign Up'}>
+          <EmergencyModeControl context={emergencyContext} />
+          <Link to="/signin" state={{ from: '/' }} className="avatar profile-trigger" aria-label="Login / Sign Up" title={currentUser ? `Account: ${currentUser.username}` : 'Login / Sign Up'}>
             {currentUser ? currentUser.firstName.charAt(0).toUpperCase() : <UserRound size={17} aria-hidden="true" />}
-          </button>
+          </Link>
         </div>
 
       </header>
@@ -295,7 +300,7 @@ function App() {
 
       <main id="dashboard">
         <section className="home-intro"><span className="eyebrow">BENGALURU FLOOD INTELLIGENCE</span><h1>Plan a route with <em>local context.</em></h1><p>Select a Bengaluru source and an inventory-backed destination to review current forecast context and route information.</p></section>
-        <FloodIntelligence />
+        <FloodIntelligence onEmergencyContextChange={setEmergencyContext} />
 
         <section className="about-page about-compact" id="about" aria-labelledby="about-title">
           <div className="about-compact-heading">
@@ -318,30 +323,13 @@ function App() {
         <div className="site-footer-columns">
           <section aria-labelledby="footer-system"><h2 id="footer-system">System</h2><a href="#about">About FloodSense</a><Link to="/explore">Explore Flood Inventory</Link><a href="#about">How It Works</a></section>
           <section aria-labelledby="footer-standard"><h2 id="footer-standard">Standard</h2><a href="#dashboard">Risk Indicators</a><a href="#dashboard">Route Comparison</a><a href="#dashboard">Scenario Explorer</a></section>
-          <section aria-labelledby="footer-workspace"><h2 id="footer-workspace">Workspace</h2><button type="button" onClick={() => setAuthOpen(true)}>Login / Sign Up</button><a href="#dashboard">Open Dashboard</a><a href="#dashboard">Route planner</a></section>
+          <section aria-labelledby="footer-workspace"><h2 id="footer-workspace">Workspace</h2><Link to="/signin" state={{ from: '/' }}>Login / Sign Up</Link><a href="#dashboard">Open Dashboard</a><a href="#dashboard">Route planner</a></section>
         </div>
         <div className="site-footer-bottom">
           <div className="site-footer-brand"><span className="footer-mark"><Waves size={17} /></span><strong>FloodSense</strong><span>A clearer view of local flood risk.</span></div>
           <p>© 2026 FloodSense · Urban flood-risk demonstration</p>
         </div>
       </footer>
-
-      {authOpen && (
-
-        <AuthModal
-
-          onClose={() => setAuthOpen(false)}
-
-          userEmail={currentUser?.email || null}
-
-          onSignedIn={(user) => setCurrentUser(user)}
-
-          onSignedOut={() => setCurrentUser(null)}
-
-        />
-
-      )}
-
 
     </div>
 
@@ -352,7 +340,9 @@ function App() {
 function RootRoutes() {
   return <ThemeProvider><BrowserRouter><Routes>
     <Route path="/" element={<App />} />
+    <Route path="/signin" element={<SignInPage />} />
     <Route path="/explore" element={<ExplorePage />} />
+    <Route path="/alerts" element={<SmartAlerts />} />
     <Route path="*" element={<main className="explore-page"><h1>Page not found</h1><Link to="/">Back to Home</Link></main>} />
   </Routes></BrowserRouter></ThemeProvider>;
 }

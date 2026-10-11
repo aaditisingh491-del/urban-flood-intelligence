@@ -98,3 +98,26 @@ def test_assessment_forecast_failure_is_honestly_unavailable(monkeypatch):
     assert body["model_category"] == "UNAVAILABLE"
     assert body["forecast"] is None
     assert body["forecast_error"]
+
+
+def test_smart_alert_forecast_endpoint_validates_service_area_and_returns_hourly_data(monkeypatch):
+    calls = []
+    expected = {"provider": "Open-Meteo", "generated_at": "2026-10-11T12:00:00+05:30",
+                "timezone": "Asia/Kolkata", "units": {"precipitation": "mm", "precipitation_probability": "%"},
+                "slots": [{"valid_at": "2026-10-11T13:00:00+05:30", "precipitation_mm": 1.5,
+                           "precipitation_probability_percent": 60}]}
+    monkeypatch.setattr(main, "get_destination_forecast", lambda lat, lon: (calls.append((lat, lon)) or expected))
+    response = client.get("/api/locations/forecast?latitude=12.9716&longitude=77.5946")
+    assert response.status_code == 200
+    assert response.json()["forecast"] == expected
+    assert calls == [(12.9716, 77.5946)]
+    outside = client.get("/api/locations/forecast?latitude=28.6139&longitude=77.2090")
+    assert outside.status_code == 422
+    assert len(calls) == 1
+
+
+def test_smart_alert_forecast_endpoint_returns_honest_provider_failure(monkeypatch):
+    monkeypatch.setattr(main, "get_destination_forecast", lambda *_: (_ for _ in ()).throw(RuntimeError("offline")))
+    response = client.get("/api/locations/forecast?latitude=12.9716&longitude=77.5946")
+    assert response.status_code == 502
+    assert response.json()["detail"] == "Open-Meteo forecast is unavailable for this location. Retry later."

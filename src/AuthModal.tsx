@@ -1,4 +1,5 @@
 
+import './cognito';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import {
@@ -6,9 +7,11 @@ import {
   signUp,
   signOut,
   confirmSignUp,
+  confirmSignIn,
   getCurrentUser,
   fetchUserAttributes,
 } from 'aws-amplify/auth';
+import { cognitoConfigurationError, cognitoIsConfigured, cognitoSelfSignUpEnabled } from './cognito';
 
 type AuthModalProps = {
   onClose: () => void;
@@ -21,7 +24,7 @@ type AuthModalProps = {
   onSignedOut: () => void;
 };
 
-type Mode = 'login' | 'signup' | 'confirm';
+type Mode = 'login' | 'signup' | 'confirm' | 'challenge';
 
 export default function AuthModal({
   onClose,
@@ -38,6 +41,7 @@ export default function AuthModal({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
+  const [challengeStep, setChallengeStep] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -73,9 +77,23 @@ export default function AuthModal({
     return 'Something went wrong. Please try again.';
   };
 
+  const finishSignIn = async (fallbackEmail: string) => {
+    const user = await getCurrentUser();
+    const attributes = await fetchUserAttributes();
+    onSignedIn({ username: user.username, firstName: attributes.given_name || user.username, email: attributes.email || fallbackEmail });
+  };
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     clearMessages();
+    if (!cognitoIsConfigured) {
+      setError(cognitoConfigurationError || 'Cognito sign-in is not configured.');
+      return;
+    }
+    if (mode === 'signup' && !cognitoSelfSignUpEnabled) {
+      setError('Self-registration is disabled in this app configuration. Sign in with an existing account or contact the app administrator.');
+      return;
+    }
     setBusy(true);
 
     try {
@@ -127,6 +145,13 @@ export default function AuthModal({
             'Your confirmation request was submitted. Follow the next verification step to continue.'
           );
         }
+      } else if (mode === 'challenge') {
+        const result = await confirmSignIn({ challengeResponse: code.trim() });
+        if (result.isSignedIn) {
+          await finishSignIn(email.trim());
+          return;
+        }
+        setMessage('Another verification step is required. Follow your account instructions and try again.');
       } else {
         const result = await signIn({
           username: email.trim(),
@@ -134,16 +159,7 @@ export default function AuthModal({
         });
 
         if (result.isSignedIn) {
-          const user = await getCurrentUser();
-          const attributes = await fetchUserAttributes();
-
-          onSignedIn({
-            username: user.username,
-            firstName: attributes.given_name || user.username,
-            email: attributes.email || email.trim(),
-          });
-
-          onClose();
+          await finishSignIn(email.trim());
         } else if (
           result.nextStep.signInStep === 'CONFIRM_SIGN_UP'
         ) {
@@ -152,10 +168,15 @@ export default function AuthModal({
           setMessage(
             'Your email address has not been verified. Enter the verification code sent to your email address.'
           );
+        } else if (['CONFIRM_SIGN_IN_WITH_SMS_CODE', 'CONFIRM_SIGN_IN_WITH_EMAIL_CODE', 'CONFIRM_SIGN_IN_WITH_TOTP_CODE', 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED'].includes(result.nextStep.signInStep)) {
+          setChallengeStep(result.nextStep.signInStep);
+          setCode('');
+          setMode('challenge');
+          setMessage(result.nextStep.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED'
+            ? 'Your account requires a password update before sign-in can finish.'
+            : 'Enter the verification code required by your account.');
         } else {
-          setMessage(
-            'Additional verification is required to complete sign-in. Please follow the instructions provided.'
-          );
+          setMessage('Your account requires an additional setup or selection step not supported by this form. Contact the app administrator for help.');
         }
       }
     } catch (err) {
@@ -167,6 +188,10 @@ export default function AuthModal({
 
   const handleSignOut = async () => {
     clearMessages();
+    if (!cognitoIsConfigured) {
+      setError(cognitoConfigurationError || 'Cognito sign-in is not configured.');
+      return;
+    }
     setBusy(true);
 
     try {
@@ -199,6 +224,13 @@ export default function AuthModal({
         >
           ×
         </button>
+        <button type="button" className="auth-back" onClick={onClose}>
+          Back
+        </button>
+
+        {!cognitoIsConfigured && (
+          <p className="auth-error" role="alert">{cognitoConfigurationError}</p>
+        )}
 
         {isLoggedIn ? (
           <>
@@ -213,7 +245,7 @@ export default function AuthModal({
             <button
               type="button"
               className="auth-submit"
-              disabled={busy}
+              disabled={busy || !cognitoIsConfigured}
               onClick={handleSignOut}
             >
               {busy ? 'Signing out...' : 'Sign out'}
@@ -226,7 +258,9 @@ export default function AuthModal({
             <h2 id="auth-title">
               {mode === 'signup'
                 ? 'Create your account'
-                : mode === 'confirm'
+                : mode === 'challenge'
+                  ? 'Complete sign-in verification'
+                  : mode === 'confirm'
                   ? 'Verify your email'
                   : 'Sign in'}
             </h2>
@@ -234,6 +268,8 @@ export default function AuthModal({
             <p className="auth-description">
               {mode === 'signup'
                 ? 'Create an account to access your dashboard.'
+                : mode === 'challenge'
+                  ? 'Complete the additional verification step required by your account.'
                 : mode === 'confirm'
                   ? 'Enter the verification code sent to your email address.'
                   : 'Use your username or email and password to continue.'}
@@ -312,7 +348,7 @@ export default function AuthModal({
                 </>
               )}
 
-              {mode !== 'confirm' && (
+              {mode !== 'confirm' && mode !== 'challenge' && (
                 <>
                   <label htmlFor="auth-password">Password</label>
                   <input
@@ -352,10 +388,27 @@ export default function AuthModal({
                 </>
               )}
 
+              {mode === 'challenge' && (
+                <>
+                  <label htmlFor="auth-code">{challengeStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED' ? 'New password' : 'Verification code'}</label>
+                  <input
+                    id="auth-code"
+                    type={challengeStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED' ? 'password' : 'text'}
+                    autoComplete={challengeStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED' ? 'new-password' : 'one-time-code'}
+                    inputMode={challengeStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED' ? undefined : 'numeric'}
+                    minLength={challengeStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED' ? 8 : undefined}
+                    value={code}
+                    onChange={(event) => setCode(event.target.value)}
+                    placeholder={challengeStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED' ? 'Enter a new password' : 'Enter the verification code'}
+                    required
+                  />
+                </>
+              )}
+
               <button
                 type="submit"
                 className="auth-submit"
-                disabled={busy}
+                disabled={busy || !cognitoIsConfigured}
               >
                 {busy
                   ? 'Please wait...'
@@ -363,6 +416,8 @@ export default function AuthModal({
                     ? 'Create account'
                     : mode === 'confirm'
                       ? 'Verify email'
+                    : mode === 'challenge'
+                      ? 'Continue'
                       : 'Sign in'}
               </button>
             </form>
@@ -394,7 +449,7 @@ export default function AuthModal({
                     Sign in
                   </button>
                 </>
-              ) : (
+              ) : cognitoSelfSignUpEnabled ? (
                 <>
                   New to the platform?{' '}
                   <button
@@ -407,6 +462,8 @@ export default function AuthModal({
                     Create an account
                   </button>
                 </>
+              ) : (
+                <span>Self-registration is not enabled for this app.</span>
               )}
             </div>
           </>

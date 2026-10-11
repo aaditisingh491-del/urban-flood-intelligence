@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from backend import flood_intelligence as fi
@@ -168,6 +169,9 @@ def test_route_hazard_intersection_and_avoidance(monkeypatch):
     assert result["rejected_routes"] == 1
     assert result["recommended_route"]["distance_m"] == 8000
     assert result["safe_route_verified"] is False
+    assert len(result["route_options"]) == 2
+    assert result["route_options"][0]["verified_current_hazard_count"] == 1
+    assert result["route_options"][1]["recommended"] is True
 
 
 def test_no_candidate_clear_of_verified_hazards(monkeypatch):
@@ -192,6 +196,126 @@ def test_stale_incident_is_not_used_as_hazard(monkeypatch):
                                  "destination": {"latitude": 12.92, "longitude": 77.55}}, [record])
     assert result["safe_route_verified"] is False
     assert result["recommended_route"]["distance_m"] == 2000
+    assert result["route_options"][0]["verified_current_hazard_count"] == 0
+    assert "No fresh verified flood reports" in result["warnings"][4]
+    assert any("stale or unverified" in warning for warning in result["warnings"])
+
+
+def test_route_geometry_without_provider_metrics_remains_selectable(monkeypatch):
+    route = {"geometry": {"type": "LineString", "coordinates": [[77.53, 12.92], [77.55, 12.92]]}}
+    monkeypatch.setattr(fi, "_route", lambda *_: [route])
+    result = fi.alternate_route({"origin": {"latitude": 12.92, "longitude": 77.53}, "destination": {"latitude": 12.92, "longitude": 77.55}}, [])
+    assert result["route_options"][0]["distance_m"] is None
+    assert result["route_options"][0]["duration_s"] is None
+    assert "Only route returned" in result["route_options"][0]["recommendation_reason"]
+
+
+def test_route_options_include_static_vulnerability_context_and_deduplicate(monkeypatch):
+    route = {"geometry": {"type": "LineString", "coordinates": [[77.53, 12.92], [77.55, 12.92]]}, "distance": 2000, "duration": 600}
+    inventory = {"latitude": 12.92, "longitude": 77.54, "location_name": "Inventory point", "event_type": "exposure_location", "source_name": "Static source"}
+    monkeypatch.setattr(fi, "_route", lambda *_: [route, dict(route), {"geometry": {"type": "LineString", "coordinates": [[77.53, 12.92], [77.53, 12.95], [77.55, 12.92]]}, "distance": 3000, "duration": 800}])
+    result = fi.alternate_route({"origin": {"latitude": 12.92, "longitude": 77.53}, "destination": {"latitude": 12.92, "longitude": 77.55}}, [inventory])
+    assert len(result["route_options"]) == 2
+    assert result["route_options"][0]["nearby_vulnerability_count"] == 1
+    assert result["route_options"][0]["recommended"] is True
+    assert "static" in result["route_options"][0]["route_evidence"]
+    assert result["safe_route_verified"] is False
+
+
+def test_one_provider_route_is_a_valid_comparison(monkeypatch):
+    route = {"geometry": {"type": "LineString", "coordinates": [[77.53, 12.92], [77.55, 12.92]]}, "distance": 2000, "duration": 600}
+    monkeypatch.setattr(fi, "_route", lambda *_: [route])
+    result = fi.alternate_route({"origin": {"latitude": 12.92, "longitude": 77.53}, "destination": {"latitude": 12.92, "longitude": 77.55}}, [])
+    assert len(result["route_options"]) == 1
+    assert result["selected_route_id"] == "route-1"
+    assert result["route_options"][0]["recommended"] is False
+    assert result["route_options"][0]["label"] == "Route A"
+    assert "Only route returned" in result["route_options"][0]["recommendation_reason"]
+    assert result["fresh_verified_reports_available"] is False
+    assert result["safe_route_verified"] is False
+
+
+def test_route_names_use_osrm_step_names_and_fall_back_without_inventing(monkeypatch):
+    first = {"geometry": {"type": "LineString", "coordinates": [[77.53, 12.92], [77.55, 12.92]]},
+             "distance": 2000, "duration": 600,
+             "legs": [{"steps": [{"name": "Bannerghatta Road"}, {"name": ""}]}]}
+    second = {"geometry": {"type": "LineString", "coordinates": [[77.53, 12.92], [77.53, 12.95], [77.55, 12.92]]},
+              "distance": 3000, "duration": 720}
+    monkeypatch.setattr(fi, "_route", lambda *_: [first, second])
+    result = fi.alternate_route({"origin": {"latitude": 12.92, "longitude": 77.53},
+                                 "destination": {"latitude": 12.92, "longitude": 77.55}}, [])
+    assert [option["label"] for option in result["route_options"]] == ["Via Bannerghatta Road", "Route B"]
+    assert result["route_options"][0]["recommended"] is True
+    assert result["route_options"][0]["recommendation_reason"] == "Lowest estimated travel time among available candidates."
+
+
+def test_equal_route_times_report_provider_order_without_claiming_advantage(monkeypatch):
+    routes = [
+        {"geometry": {"type": "LineString", "coordinates": [[77.53, 12.92], [77.55, 12.92]]}, "distance": 2000, "duration": 600},
+        {"geometry": {"type": "LineString", "coordinates": [[77.53, 12.92], [77.53, 12.95], [77.55, 12.92]]}, "distance": 3000, "duration": 600},
+    ]
+    monkeypatch.setattr(fi, "_route", lambda *_: routes)
+    result = fi.alternate_route({"origin": {"latitude": 12.92, "longitude": 77.53},
+                                 "destination": {"latitude": 12.92, "longitude": 77.55}}, [])
+    assert result["route_options"][0]["recommended"] is True
+    assert result["route_options"][0]["recommendation_reason"] == "Selected by provider order; available travel times are equal."
+
+
+def test_osrm_request_enables_step_names_for_real_route_labels(monkeypatch):
+    class Response:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self): return {"code": "Ok", "routes": []}
+    captured = {}
+    def request(_url, **kwargs):
+        captured.update(kwargs)
+        return Response()
+    monkeypatch.setattr(fi.httpx, "get", request)
+    monkeypatch.setattr(fi.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(fi, "_OSRM_LAST_REQUEST", 0.0)
+    fi._route({"longitude": 77.5, "latitude": 12.9}, {"longitude": 77.6, "latitude": 12.95}, "driving")
+    assert captured["params"]["steps"] == "true"
+
+
+def test_route_provider_rate_limit_timeout_and_malformed_response(monkeypatch):
+    class Response:
+        status_code = 429
+    monkeypatch.setattr(fi.httpx, "get", lambda *args, **kwargs: Response())
+    with pytest.raises(HTTPException) as rate_limited:
+        fi._route({"longitude": 77.5, "latitude": 12.9}, {"longitude": 77.6, "latitude": 12.95}, "driving")
+    assert rate_limited.value.status_code == 429
+
+    def timeout(*args, **kwargs): raise fi.httpx.TimeoutException("timed out")
+    monkeypatch.setattr(fi.httpx, "get", timeout)
+    with pytest.raises(HTTPException) as timed_out:
+        fi._route({"longitude": 77.5, "latitude": 12.9}, {"longitude": 77.6, "latitude": 12.95}, "driving")
+    assert timed_out.value.status_code == 504
+
+    class JsonResponse:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self): return {"code": "Ok", "routes": {"not": "a list"}}
+    monkeypatch.setattr(fi.httpx, "get", lambda *args, **kwargs: JsonResponse())
+    with pytest.raises(HTTPException) as malformed:
+        fi._route({"longitude": 77.5, "latitude": 12.9}, {"longitude": 77.6, "latitude": 12.95}, "driving")
+    assert malformed.value.status_code == 502
+
+
+def test_osrm_requests_alternatives_and_geojson_in_lon_lat_order(monkeypatch):
+    captured = {}
+    class Response:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self): return {"code": "Ok", "routes": [{"id": 1}, {"id": 2}]}
+    def get(url, **kwargs):
+        captured["url"] = url
+        captured.update(kwargs)
+        return Response()
+    monkeypatch.setattr(fi.httpx, "get", get)
+    routes = fi._route({"latitude": 12.91, "longitude": 77.59}, {"latitude": 12.97, "longitude": 77.62}, "driving")
+    assert len(routes) == 2
+    assert "/77.59,12.91;77.62,12.97" in captured["url"]
+    assert captured["params"] == {"alternatives": "true", "overview": "full", "geometries": "geojson", "steps": "true"}
 
 
 def test_route_request_validation_and_provider_failure(monkeypatch):
@@ -203,7 +327,8 @@ def test_route_request_validation_and_provider_failure(monkeypatch):
     known = fi.load_inventory()[0]
     failed = client.post("/api/routes/alternate", json={"origin": {"latitude": 12.92, "longitude": 77.53},
                                                            "destination_location_id": known["location_id"]})
-    assert failed.status_code == 503
+    assert failed.status_code == 404
+    assert "found no route" in failed.json()["detail"]
 
 
 def test_backend_rejects_source_outside_bengaluru():

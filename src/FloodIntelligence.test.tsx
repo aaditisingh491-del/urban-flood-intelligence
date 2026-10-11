@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import FloodIntelligence from './FloodIntelligence';
 import SafetyAdvice from './SafetyAdvice';
@@ -10,7 +10,7 @@ vi.mock('react-leaflet', () => ({
   TileLayer: () => <span />,
   CircleMarker: ({ children }: { children?: React.ReactNode }) => <span data-testid="flood-marker">{children}</span>,
   Popup: ({ children }: { children: ReactNode }) => <span>{children}</span>,
-  GeoJSON: () => <span data-testid="route-geometry" />,
+  GeoJSON: ({ style }: { style?: { color?: string } }) => <span data-testid="route-geometry" data-route-color={style?.color} />,
   useMapEvents: (handlers: typeof mapMock.handlers) => { mapMock.handlers = handlers; return null; },
 }));
 
@@ -35,7 +35,11 @@ function mockFetch() {
       const name = new URL(url, 'http://localhost').searchParams.get('q') || 'Place';
       return new Response(JSON.stringify(name === 'Delhi' ? { results: [], message: 'Please select a location within Bengaluru.' } : { results: [{ name, latitude: 12.95, longitude: 77.61 }] }), { status: 200 });
     }
-    if (url.includes('/api/routes/alternate') && init?.method === 'POST') return new Response(JSON.stringify({ original_route: { geometry: { type: 'LineString', coordinates: [[77.6, 12.9], [77.7, 13]] }, distance_m: 5300, duration_s: 660 }, recommended_route: null, safe_route_verified: false, message: 'Route cannot be verified as safe.', warnings: ['Coverage is incomplete.'], hazards_avoided: 0, alternatives_considered: 1 }), { status: 200 });
+    if (url.includes('/api/routes/alternate') && init?.method === 'POST') {
+      const geometry = { type: 'LineString', coordinates: [[77.6, 12.9], [77.7, 13]] } as const;
+      const option = { route_id: 'route-1', label: 'Route A', geometry, distance_m: 5300, duration_s: 660, recommended: false, recommendation_reason: 'Only route returned by the routing provider; alternatives could not be compared.', verified_current_hazard_count: 0, verified_current_hazards: [], nearby_vulnerability_count: 1, nearby_vulnerability_locations: [{ location_name: row.location_name }], route_evidence: 'Point screening.' };
+      return new Response(JSON.stringify({ original_route: { geometry, distance_m: 5300, duration_s: 660 }, recommended_route: null, route_options: [option], selected_route_id: 'route-1', fresh_verified_reports_available: false, safe_route_verified: false, message: 'Route cannot be verified as safe.', warnings: ['Coverage is incomplete.'], hazards_avoided: 0, alternatives_considered: 1, data_source: 'OSRM / OpenStreetMap', data_fetched_at: new Date().toISOString() }), { status: 200 });
+    }
     return new Response('{}', { status: 404 });
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -79,15 +83,87 @@ describe('FloodIntelligence', () => {
     fireEvent.change(screen.getByLabelText('Source (Bengaluru only)'), { target: { value: 'Koramangala' } });
     fireEvent.click(await screen.findByRole('button', { name: 'Koramangala' }, { timeout: 1500 }));
     fireEvent.click(screen.getByRole('button', { name: 'Find route' }));
-    expect(await screen.findByText('Route cannot be verified as safe.')).toBeInTheDocument();
+    expect(await screen.findByText(/No fresh verified flood reports are mapped near this candidate/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Why this road is dangerous' })).toBeInTheDocument();
-    expect(screen.getByText(/fastest candidate shown as a dashed reference/)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Flood-aware route comparison' })).toBeInTheDocument();
+    expect(screen.getAllByRole('region', { name: 'Flood-aware route comparison' })).toHaveLength(1);
+    expect(screen.getByText('Only one route available — alternatives could not be compared.')).toBeInTheDocument();
+    expect(screen.getByText(/No fresh verified flood reports available for comparison/)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Flood-aware route comparison' }).textContent).toContain('Static vulnerability context: 1 point');
+    expect(screen.getByRole('heading', { name: 'Via Route A' })).toBeInTheDocument();
     expect(screen.getByTestId('route-geometry')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Select current route to display')).not.toBeInTheDocument();
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(([url, init]) => String(url).includes('/api/routes/alternate') && init?.method === 'POST');
       expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ destination_location_id: 'loc-1' });
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes('loc-1/assessment'))).toBe(true);
     });
+  });
+
+  it('renders one combined comparison, selects the current route, and highlights it on the map', async () => {
+    const fetchMock = mockFetch();
+    const original = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) => {
+      if (String(input).includes('/api/routes/alternate')) {
+        const first = { type: 'LineString', coordinates: [[77.6, 12.9], [77.61, 12.91]] } as const;
+        const second = { type: 'LineString', coordinates: [[77.6, 12.9], [77.60, 12.92], [77.61, 12.91]] } as const;
+        const base = { recommended: false, verified_current_hazards: [], nearby_vulnerability_count: 0, nearby_vulnerability_locations: [], route_evidence: 'Point screen only.' };
+        const option1 = { ...base, route_id: 'route-1', label: 'Via Test Road', geometry: first, distance_m: 2000, duration_s: 300, recommendation_reason: 'Lowest estimated travel time among available candidates.', verified_current_hazard_count: 0 };
+        const option2 = { ...base, route_id: 'route-2', label: 'Route B', geometry: second, distance_m: 2400, duration_s: 420, recommendation_reason: 'Available routing-provider alternative.', verified_current_hazard_count: 1, verified_current_hazards: [{ location_name: 'Reported point', source_name: 'Public bulletin', source_url: 'https://example.test/report', last_verified_at: new Date().toISOString() }] };
+        return new Response(JSON.stringify({ original_route: { geometry: first, distance_m: 2000, duration_s: 300 }, recommended_route: { geometry: first, distance_m: 2000, duration_s: 300, route_id: 'route-1' }, route_options: [{ ...option1, recommended: true }, option2], selected_route_id: 'route-1', fresh_verified_reports_available: true, safe_route_verified: false, message: 'Not safety verified.', warnings: ['No safety guarantee.'], hazards_avoided: 0, alternatives_considered: 2, data_source: 'OSRM / OpenStreetMap', data_fetched_at: new Date().toISOString() }), { status: 200 });
+      }
+      return original(input, init);
+    });
+    render(<FloodIntelligence />);
+    await screen.findByRole('option', { name: /Low-lying ward/ });
+    fireEvent.change(screen.getByLabelText('Destination (flood-prone inventory only)'), { target: { value: 'loc-1' } });
+    fireEvent.change(screen.getByLabelText('Source (Bengaluru only)'), { target: { value: 'Koramangala' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Koramangala' }, { timeout: 1500 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Find route' }));
+    const comparison = await screen.findByRole('region', { name: 'Flood-aware route comparison' });
+    expect(screen.getAllByRole('region', { name: 'Flood-aware route comparison' })).toHaveLength(1);
+    expect(screen.getByRole('heading', { name: 'Via Test Road' })).toBeInTheDocument();
+    expect(screen.getByText('Current route: Via Test Road')).toBeInTheDocument();
+    expect(screen.getByText('Alternative route: Route B')).toBeInTheDocument();
+    expect(comparison.textContent).toContain('2.0 km · 5 min');
+    expect(comparison.textContent).toContain('2.4 km · 7 min');
+    expect(screen.getByText(/Compared with Route B: 400 m shorter · 2 min faster/)).toBeInTheDocument();
+    expect(within(comparison).getByText('Keep current route')).toBeInTheDocument();
+    expect(within(comparison).getByText(/mapped near the alternative, with none mapped near the current route/)).toBeInTheDocument();
+    expect(comparison.textContent).toContain('Static vulnerability context: 0 points.');
+    expect(comparison.textContent).toContain('Reported point · Public bulletin');
+    expect(comparison.querySelectorAll('.route-option')).toHaveLength(0);
+    expect(comparison.querySelectorAll('.route-option-weather')).toHaveLength(0);
+    expect(comparison.querySelectorAll('.route-result')).toHaveLength(0);
+    expect(screen.getAllByLabelText('Destination evening weather outlook')).toHaveLength(1);
+    expect(comparison.querySelectorAll('.route-danger-context')).toHaveLength(1);
+    expect(comparison.querySelectorAll('.route-result')).toHaveLength(0);
+    const beforeSelect = screen.getAllByTestId('route-geometry');
+    expect(beforeSelect.map(route => route.getAttribute('data-route-color'))).toEqual(['#4878d0', '#00a37a']);
+    const routeSelect = screen.getByRole('combobox', { name: 'Select current route to display' });
+    fireEvent.change(routeSelect, { target: { value: 'route-2' } });
+    expect(screen.getByRole('heading', { name: 'Via Route B' })).toBeInTheDocument();
+    expect(within(comparison).getByText('Consider switching')).toBeInTheDocument();
+    expect(screen.getByText(/1 fresh verified point report\(s\) are mapped near this candidate/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View source' })).toHaveAttribute('href', 'https://example.test/report');
+    expect(screen.getAllByTestId('route-geometry')).toHaveLength(2);
+    const afterSelect = screen.getAllByTestId('route-geometry');
+    expect(afterSelect.map(route => route.getAttribute('data-route-color'))).toEqual(['#e58a18', '#00a37a']);
+  });
+
+  it('shows routing failures with a retry action instead of invented route details', async () => {
+    const fetchMock = mockFetch();
+    const original = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) => String(input).includes('/api/routes/alternate') ? new Response(JSON.stringify({ detail: 'The routing provider timed out. Please retry.' }), { status: 504 }) : original(input, init));
+    render(<FloodIntelligence />);
+    await screen.findByRole('option', { name: /Low-lying ward/ });
+    fireEvent.change(screen.getByLabelText('Destination (flood-prone inventory only)'), { target: { value: 'loc-1' } });
+    fireEvent.change(screen.getByLabelText('Source (Bengaluru only)'), { target: { value: 'Koramangala' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Koramangala' }, { timeout: 1500 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Find route' }));
+    expect(await screen.findByText('The routing provider timed out. Please retry.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
+    expect(screen.queryByRole('region', { name: 'Flood-aware route comparison' })).not.toBeInTheDocument();
   });
 
   it('refreshes the destination assessment and evening outlook when inventory destination changes', async () => {

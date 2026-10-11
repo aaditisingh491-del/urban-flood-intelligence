@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, MapPin, Search } from 'lucide-react';
 import './explore-page.css';
 import ThemeToggle from './theme';
+import EmergencyModeControl from './EmergencyMode';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 type Vulnerability = { location_id: string; location_name: string; city: string; state: string; area?: string | null; ward_name?: string | null; ward_number?: string | null; zone?: string | null; description?: string; source_name: string; source_url: string; latitude: number; longitude: number; event_type: string; status: string; confidence: string };
@@ -39,7 +40,7 @@ export default function ExplorePage() {
     return (!query || text.includes(query.toLowerCase())) && (ward === 'all' || row.ward_name === ward);
   }), [records, query, ward]);
   return <main className="explore-page">
-    <header className="explore-page-head"><ThemeToggle/><Link to="/" className="back-home"><ArrowLeft size={17}/> Back to Home</Link><p className="explore-eyebrow">FLOODSENSE · BENGALURU</p><h1>Flood-vulnerable locations</h1><p className="explore-description">Browse the source-backed Bengaluru vulnerability inventory. These locations are not confirmed active flood incidents or road closures.</p></header>
+    <header className="explore-page-head"><ThemeToggle/><EmergencyModeControl/><Link to="/alerts" className="back-home">Smart Flood Alerts</Link><Link to="/" className="back-home"><ArrowLeft size={17}/> Back to Home</Link><p className="explore-eyebrow">FLOODSENSE · BENGALURU</p><h1>Flood-vulnerable locations</h1><p className="explore-description">Browse the source-backed Bengaluru vulnerability inventory. These locations are not confirmed active flood incidents or road closures.</p></header>
     <section className="explore-tools" aria-label="Inventory filters"><label><span>Search locations</span><div><Search size={17}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Location, ward, or zone" /></div></label><label><span>Ward</span><select value={ward} onChange={event => setWard(event.target.value)}><option value="all">All wards</option>{wards.map(value => <option key={value}>{value}</option>)}</select></label><p aria-live="polite">{loading ? 'Loading Bengaluru inventory…' : `${visible.length} of ${records.length} locations`}</p></section>
     {error && <p className="explore-state explore-error" role="alert">{error} Refresh the page to retry.</p>}
     {loading && !error && <p className="explore-state" role="status">Loading source-backed locations…</p>}
