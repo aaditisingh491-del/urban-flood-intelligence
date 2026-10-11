@@ -6,7 +6,6 @@ import 'leaflet/dist/leaflet.css';
 type Props = {
   risk: number;
   coordinates?: { latitude: number; longitude: number } | null;
-  onSelect?: () => void;
   municipality?: boolean;
 };
 
@@ -19,7 +18,7 @@ function ResizeMap() {
   return null;
 }
 
-export default function InteractiveMap({ risk, coordinates, onSelect, municipality = false }: Props) {
+export default function InteractiveMap({ risk, coordinates, municipality = false }: Props) {
   const center: LatLngExpression = coordinates
     ? [coordinates.latitude, coordinates.longitude]
     : [12.9716, 77.5946];
@@ -38,7 +37,6 @@ export default function InteractiveMap({ risk, coordinates, onSelect, municipali
             center={center}
             radius={10}
             pathOptions={{ color, fillColor: color, fillOpacity: 0.85, weight: 3 }}
-            eventHandlers={{ click: () => onSelect?.() }}
           >
             <Popup>
               <strong>Backend demo risk point</strong><br />

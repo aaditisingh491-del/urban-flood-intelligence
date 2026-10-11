@@ -1,0 +1,152 @@
+:root{color-scheme:dark}html[data-theme="light"]{color-scheme:light;background:#f4f7f5;color:#20332e}html[data-theme="light"] body{background:#f4f7f5;color:#20332e}html[data-theme="light"] .app{background:#f4f7f5;color:#20332e}html[data-theme="light"] .topbar{background:#fff;border-color:#dce5e0;box-shadow:0 2px 12px #20332e0b}html[data-theme="light"] .brand strong{color:#19352e}html[data-theme="light"] .brand span{color:#61766d}html[data-theme="light"] .top-nav a{color:#526c62}html[data-theme="light"] .top-actions button{color:#365d50}html[data-theme="light"] .theme-toggle{display:flex;gap:3px;padding:3px;border:1px solid #dce5e0;background:#f2f6f3;border-radius:7px}html[data-theme="light"] .theme-toggle button{border:0;border-radius:5px;padding:7px 9px;background:transparent;color:#526c62;font-size:10px;cursor:pointer}html[data-theme="light"] .theme-toggle button[aria-pressed="true"]{background:#dcece4;color:#174b3b;font-weight:700}html[data-theme="dark"] .theme-toggle{display:flex;gap:3px;padding:3px;border:1px solid #34464f;background:#111b23;border-radius:7px}html[data-theme="dark"] .theme-toggle button{border:0;border-radius:5px;padding:7px 9px;background:transparent;color:#a1b0b5;font-size:10px;cursor:pointer}html[data-theme="dark"] .theme-toggle button[aria-pressed="true"]{background:#203b35;color:#d4eee6;font-weight:700}html[data-theme="light"] .hero-section{color:#20332e}html[data-theme="light"] .hero-kicker,html[data-theme="light"] .about-eyebrow{color:#486b5f}html[data-theme="light"] .hero-copy h1{color:#18362e}html[data-theme="light"] .hero-lede{color:#536c62}html[data-theme="light"] .hero-proof{color:#42665a}html[data-theme="light"] .hero-disclaimer{color:#536c62;background:#e9f0ec}html[data-theme="light"] .home-intro h1{color:#19352e}html[data-theme="light"] .home-intro p{color:#586f66}html[data-theme="light"] .flood-intelligence,html[data-theme="light"] .explore-page{color:#20332e;background:#fff;border-color:#dce5e0}html[data-theme="light"] .flood-heading h2,html[data-theme="light"] .explore-page-head h1,html[data-theme="light"] .explore-location h2{color:#18362e}html[data-theme="light"] .flood-heading p,html[data-theme="light"] .flood-disclaimer,html[data-theme="light"] .explore-description,html[data-theme="light"] .explore-location-title p,html[data-theme="light"] .explore-evidence{color:#526b61}html[data-theme="light"] .flood-heading small,html[data-theme="light"] .destination-risk-card,html[data-theme="light"] .evening-outlook,html[data-theme="light"] .home-safety-panel,html[data-theme="light"] .explore-tools,html[data-theme="light"] .explore-state,html[data-theme="light"] .explore-location{background:#f6f9f7;border-color:#dce5e0;color:#20332e}html[data-theme="light"] .route-search label,html[data-theme="light"] .explore-tools label,html[data-theme="light"] .destination-risk-card p,html[data-theme="light"] .evening-outlook p{color:#4d655c}html[data-theme="light"] .route-search>div,html[data-theme="light"] .route-search select,html[data-theme="light"] .explore-tools input,html[data-theme="light"] .explore-tools select,html[data-theme="light"] .place-suggestions{background:#fff;border-color:#cbd9d1;color:#20332e}html[data-theme="light"] .route-search input{color:#20332e}html[data-theme="light"] .place-suggestions button{color:#20332e}html[data-theme="light"] .place-suggestions button:hover,html[data-theme="light"] .place-suggestions button:focus{background:#e8f2ec}html[data-theme="light"] .flood-map{border-color:#cbd9d1}html[data-theme="light"] .flood-map .leaflet-container{background:#eaf1ed}html[data-theme="light"] .flood-map .leaflet-popup-content-wrapper,html[data-theme="light"] .flood-map .leaflet-popup-tip{background:#fff;color:#20332e}html[data-theme="light"] .route-result{background:#fff8e8;color:#815a19;border-color:#e7ce92}html[data-theme="light"] .route-result-ok{background:#edf7f1;color:#285f49;border-color:#b8d8c5}html[data-theme="light"] .route-result p,html[data-theme="light"] .route-result small{color:#526b61}html[data-theme="light"] .route-result h3,html[data-theme="light"] .route-result-ok h3{color:#365d50}html[data-theme="light"] .forecast-slots article{background:#fff;border-color:#dce5e0;color:#20332e}html[data-theme="light"] .forecast-slots span,html[data-theme="light"] .forecast-slots small,html[data-theme="light"] .destination-risk-card small,html[data-theme="light"] .evening-outlook small{color:#526b61}html[data-theme="light"] .explore-tools label>div{background:#fff;border-color:#cbd9d1}html[data-theme="light"] .explore-location dl div{background:#eaf1ed}html[data-theme="light"] .explore-location dd{color:#20332e}html[data-theme="light"] .explore-location dt{color:#526b61}html[data-theme="light"] .back-home,html[data-theme="light"] .explore-location footer a{color:#21634d}html[data-theme="light"] .site-footer,html[data-theme="light"] .site-footer a,html[data-theme="light"] .about-page p,html[data-theme="light"] .about-page h2,html[data-theme="light"] .about-page h3{color:#40594f}html[data-theme="light"] .advice,html[data-theme="light"] .advice>p,html[data-theme="light"] .emergency-guidance{color:#40594f}html[data-theme="light"] .flood-map-legend{color:#40594f}html[data-theme="light"] button:focus-visible,html[data-theme="light"] a:focus-visible,html[data-theme="light"] input:focus-visible,html[data-theme="light"] select:focus-visible{outline:3px solid #28735b;outline-offset:2px}
+.theme-toggle{display:flex;gap:3px;padding:3px;border:1px solid #34464f;background:#111b23;border-radius:7px}.theme-toggle button{border:0;border-radius:5px;padding:7px 9px;background:transparent;color:#a1b0b5;font-size:10px;cursor:pointer}.theme-toggle button[aria-pressed="true"]{background:#203b35;color:#d4eee6;font-weight:700}.home-intro{padding:24px 0 10px}.home-intro h1{margin:8px 0;font:600 clamp(28px,4vw,40px) Georgia,serif;color:#f1f3ee}.home-intro h1 em{color:#73b8a8;font-style:normal}.home-intro p{margin:0;color:#a1b0b5;font-size:13px}.destination-insights{display:grid;grid-template-columns:minmax(260px,.8fr) minmax(0,1.2fr);gap:12px;margin:14px 0}.destination-risk-card,.evening-outlook{padding:16px;border:1px solid #293943;border-radius:6px;background:#0d171d;color:#e6efeb}.destination-risk-card h3,.evening-outlook h3{margin:4px 0 8px;color:#f1f3ee;font:600 17px Georgia,serif}.destination-risk-card p,.evening-outlook p{color:#b8c5c4;font-size:11px;line-height:1.55}.destination-risk-card a,.evening-outlook a{display:block;margin-top:8px;color:#9acfc0;font-size:10px}.insight-eyebrow{display:flex;align-items:center;gap:6px;margin:0 0 10px;color:#73b8a8!important;font-size:9px!important;font-weight:700;letter-spacing:1px}.model-score{display:block;font:700 38px Georgia,serif;color:#e2b56e}.model-score small{font:400 15px sans-serif;color:#a1b0b5}.model-label{display:block;color:#a1b0b5;font-size:9px}.risk-evidence{padding:9px;border-left:2px solid #e2b56e;background:#211e16}.forecast-slots{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:7px;margin:12px 0}.forecast-slots article{display:flex;flex-direction:column;gap:5px;padding:10px;border:1px solid #293943;border-radius:4px;background:#111b23;color:#d5dedc;font-size:10px}.forecast-slots article>b{color:#9acfc0;font-size:13px}.forecast-slots small{color:#a1b0b5;font-size:9px;line-height:1.45}.home-safety-panel{margin:14px 0;padding:15px;border:1px solid #293943;border-radius:6px;background:#111b23;color:#e6efeb}.home-safety-panel h3{margin:0 0 9px;color:#f1f3ee;font:600 18px Georgia,serif}.destination-risk-card{order:2}.evening-outlook{order:1}@media(max-width:740px){.destination-risk-card{order:1}.evening-outlook{order:2}.destination-insights{grid-template-columns:1fr}.forecast-slots{grid-template-columns:repeat(2,minmax(0,1fr))}.topbar{padding-left:12px!important;padding-right:12px!important}.theme-toggle button{padding:7px 6px;font-size:9px}}
+
+html[data-theme="light"] .home-intro .eyebrow{color:#486b5f}html[data-theme="light"] .home-safety-panel .advice{border-color:#dce5e0}html[data-theme="light"] .flood-intelligence .selected-source,html[data-theme="light"] .flood-intelligence .origin-search-notice{color:#40594f}html[data-theme="light"] .forecast-slots article>span{color:#40594f}html[data-theme="light"] .explore-tools p{color:#526b61}
+
+/* Shared semantic color tokens keep nested dashboard and Explore content readable. */
+:root {
+  --ui-page: #0b1117;
+  --ui-surface: #111b23;
+  --ui-raised: #17242d;
+  --ui-input: #0d171d;
+  --ui-text: #e6efeb;
+  --ui-heading: #f1f3ee;
+  --ui-muted: #a1b0b5;
+  --ui-secondary: #b8c5c4;
+  --ui-border: #293943;
+  --ui-focus: #82afcb;
+  --advice-background: #111b23;
+  --advice-border: #293943;
+  --advice-text: #e6efeb;
+  --advice-secondary: #b8c5c4;
+}
+html[data-theme="light"] {
+  color-scheme: light;
+  --ui-page: #f4f7f5;
+  --ui-surface: #ffffff;
+  --ui-raised: #f6f9f7;
+  --ui-input: #ffffff;
+  --ui-text: #20332e;
+  --ui-heading: #18362e;
+  --ui-muted: #526b61;
+  --ui-secondary: #40594f;
+  --ui-border: #cbd9d1;
+  --ui-focus: #28735b;
+  --advice-background: #e8f5e9;
+  --advice-border: #a5d6a7;
+  --advice-text: #1b4332;
+  --advice-secondary: #2d5a43;
+  background: var(--ui-page);
+  color: var(--ui-text);
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --advice-background: #111b23;
+  --advice-border: #293943;
+  --advice-text: #e6efeb;
+  --advice-secondary: #b8c5c4;
+}
+
+html[data-theme] body,
+html[data-theme] #root,
+html[data-theme] .app {
+  background-color: var(--ui-page);
+  color: var(--ui-text);
+}
+html[data-theme="light"] .flood-intelligence,
+html[data-theme="light"] .explore-page,
+html[data-theme="light"] .explore-location,
+html[data-theme="light"] .explore-tools,
+html[data-theme="light"] .explore-state,
+html[data-theme="light"] .destination-risk-card,
+html[data-theme="light"] .evening-outlook,
+html[data-theme="light"] .flood-stats > div,
+html[data-theme="light"] .flood-table-wrap,
+html[data-theme="light"] .forecast-slots article {
+  background-color: var(--ui-surface);
+  color: var(--ui-text);
+  border-color: var(--ui-border);
+}
+html[data-theme="light"] .explore-tools input,
+html[data-theme="light"] .explore-tools select,
+html[data-theme="light"] .route-search input,
+html[data-theme="light"] .route-search select,
+html[data-theme="light"] .flood-list-head select,
+html[data-theme="light"] .place-suggestions,
+html[data-theme="light"] .place-suggestions button {
+  background-color: var(--ui-input);
+  color: var(--ui-text);
+  border-color: var(--ui-border);
+}
+html[data-theme="light"] .flood-intelligence :is(h1,h2,h3,h4,b,strong,th,td,label,summary,button,dt,dd),
+html[data-theme="light"] .explore-page :is(h1,h2,h3,h4,b,strong,th,td,label,summary,button,dt,dd),
+html[data-theme="light"] .destination-insights :is(h1,h2,h3,h4,b,strong),
+html[data-theme="light"] .flood-heading h2,
+html[data-theme="light"] .flood-list-head h3,
+html[data-theme="light"] .explore-location h2,
+html[data-theme="light"] .destination-risk-card h3,
+html[data-theme="light"] .evening-outlook h3 {
+  color: var(--ui-heading);
+}
+html[data-theme="light"] .flood-intelligence :is(p,span,small,li,dd,dt),
+html[data-theme="light"] .explore-page :is(p,span,small,li,dd,dt),
+html[data-theme="light"] .destination-insights :is(p,span,small),
+html[data-theme="light"] .flood-heading p,
+html[data-theme="light"] .flood-disclaimer,
+html[data-theme="light"] .route-search label,
+html[data-theme="light"] .explore-tools label,
+html[data-theme="light"] .explore-tools p,
+html[data-theme="light"] .route-result p,
+html[data-theme="light"] .route-result small {
+  color: var(--ui-muted);
+}
+html[data-theme="light"] .flood-error,
+html[data-theme="light"] .auth-error { color: #8c3028; }
+html[data-theme="light"] input::placeholder,
+html[data-theme="light"] textarea::placeholder { color: #64766c; opacity: 1; }
+html[data-theme="light"] select option { color: #20332e; background: #ffffff; }
+html[data-theme="light"] :is(button,a,input,select,summary):focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+html[data-theme="light"] :is(button:disabled,select:disabled,input:disabled) { color: #66756e; }
+
+/* The advice panel uses a purpose-specific green surface only in light mode. */
+html[data-theme] .home-safety-panel {
+  background: var(--advice-background);
+  border-color: var(--advice-border);
+  color: var(--advice-text);
+}
+html[data-theme] .home-safety-panel h3,
+html[data-theme] .home-safety-panel .advice b,
+html[data-theme] .home-safety-panel .emergency-guidance b { color: var(--advice-text); }
+html[data-theme] .home-safety-panel .advice { border-color: var(--advice-border); }
+html[data-theme] .home-safety-panel .advice > summary > div > span,
+html[data-theme] .home-safety-panel .advice > p,
+html[data-theme] .home-safety-panel .emergency-guidance { color: var(--advice-secondary); }
+html[data-theme] .home-safety-panel .advice:hover,
+html[data-theme] .home-safety-panel .advice[open] { background: color-mix(in srgb, var(--advice-background), var(--ui-text) 5%); }
+html[data-theme] .home-safety-panel .advice summary:focus-visible { outline: 3px solid var(--ui-focus); outline-offset: 3px; border-radius: 4px; }
+html[data-theme="light"] .home-safety-panel .advice { border-color: #a5d6a7; }
+html[data-theme="light"] .home-safety-panel .advice-icon { color: #1b4332; }
+html[data-theme="light"] .home-safety-panel .emergency-guidance { color: #1b4332; }
+
+/* Leaflet's built-in controls have their own fixed dark colors. */
+html[data-theme="light"] .flood-map :is(.leaflet-control-zoom a,.leaflet-bar a),
+html[data-theme="light"] .flood-map .leaflet-control-layers,
+html[data-theme="light"] .flood-map .leaflet-popup-content-wrapper,
+html[data-theme="light"] .flood-map .leaflet-popup-tip {
+  color: #20332e !important;
+  background-color: #ffffff !important;
+  border-color: #cbd9d1 !important;
+}
+html[data-theme="light"] .flood-map .leaflet-control-attribution {
+  color: #40594f;
+  background: rgb(255 255 255 / 88%);
+}
+html[data-theme="light"] .flood-map .leaflet-control-attribution a,
+html[data-theme="light"] .flood-map .leaflet-popup-content a { color: #21634d; }
+html[data-theme="dark"] .flood-map .leaflet-control-attribution {
+  color: #d5dedc;
+  background: rgb(17 27 35 / 88%);
+}

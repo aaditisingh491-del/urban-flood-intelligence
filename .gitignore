@@ -19,6 +19,7 @@ htmlcov/
 # Local environment configuration and credentials
 .env
 .env.*
+!.env.example
 .aws/
 .ssh/
 .npmrc
@@ -34,6 +35,7 @@ secrets/
 work/
 .cache/
 .npm/
+.npm-cache/
 .pip-cache/
 *.log
 

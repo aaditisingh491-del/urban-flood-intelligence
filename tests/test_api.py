@@ -6,39 +6,10 @@ from backend import main
 client = TestClient(main.app)
 
 
-def test_risk_endpoint(monkeypatch):
-    monkeypatch.setattr(
-        main,
-        "get_weather_data",
-        lambda: {
-            "location": "Bengaluru",
-            "rainfall": 2.0,
-            "rainfall_forecast_6h_mm": 25.0,
-            "chance_of_rain": 70,
-            "peak_time": "3:00 AM",
-            "data_source": "WeatherAPI",
-        },
-    )
-
-    monkeypatch.setattr(
-        main,
-        "get_elevation",
-        lambda latitude, longitude: {
-            "elevation_m": 894.0,
-            "data_source": "Open-Meteo Elevation API",
-        },
-    )
-
+def test_generic_risk_endpoint_rejects_citywide_score():
     response = client.get("/api/risk")
-
-    assert response.status_code == 200
-
-    data = response.json()
-    assert data["location"] == "Bengaluru"
-    assert data["risk"] == 62
-    assert data["level"] == "MODERATE"
-    assert data["elevation_m"] == 894.0
-    assert data["model_status"] == "PROVISIONAL_UNCALIBRATED"
+    assert response.status_code == 410
+    assert "Select a Bengaluru inventory destination" in response.json()["detail"]
 
 
 def test_simulate_endpoint(monkeypatch):
@@ -69,52 +40,61 @@ def test_simulate_endpoint(monkeypatch):
     assert data["scenario_level"] == "MODERATE"
 
 
-def test_hotspots_endpoint():
+def test_hotspots_endpoint_does_not_return_fabricated_scores():
     response = client.get("/api/hotspots")
-
     assert response.status_code == 200
-
-    data = response.json()
-    assert len(data["hotspots"]) == 5
-    assert data["model_status"] == "DEMO_DATA_NOT_LIVE"
-
-    for hotspot in data["hotspots"]:
-        assert 0 <= hotspot["risk"] <= 100
-        assert hotspot["data_status"] == "DEMO"
-
-
-def test_route_risk_endpoint():
-    response = client.post("/api/route-risk", json={})
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "routes": [
-            {
-                "name": "4th Cross Road",
-                "travel_time": 41,
-                "flood_risk": 24,
-                "recommended": True,
-            },
-            {
-                "name": "80 Feet Road",
-                "travel_time": 35,
-                "flood_risk": 82,
-                "recommended": False,
-            },
-        ]
-    }
-
-
-def test_route_risk_rejects_unsupported_request_fields():
-    response = client.post(
-        "/api/route-risk",
-        json={"rainfall_delta": 20},
-    )
-
-    assert response.status_code == 422
+    body = response.json()
+    assert body["hotspots"] == []
+    assert body["model_status"] == "NO_VERIFIED_HOTSPOT_SCORES"
+    assert "verified" in body["warning"]
 
 
 def test_hotspots_endpoint_is_read_only():
     response = client.post("/api/hotspots", json={})
 
     assert response.status_code == 405
+
+
+def test_destination_assessment_uses_inventory_coordinates_and_forecast(monkeypatch):
+    monkeypatch.delenv("DYNAMODB_FLOOD_TABLE", raising=False)
+    record = main.FloodStore().list_records()[0][0]
+    calls = []
+    def forecast(latitude, longitude):
+        calls.append((latitude, longitude))
+        return {"provider": "Open-Meteo", "attribution": "Weather data by Open-Meteo.com",
+                "timezone": "Asia/Kolkata", "generated_at": "2026-10-11T12:00:00+05:30",
+                "units": {"precipitation": "mm", "precipitation_probability": "%", "temperature": "°C"},
+                "slots": [{"valid_at": f"2026-10-11T{hour:02d}:00:00+05:30", "precipitation_mm": 2.0,
+                           "precipitation_probability_percent": 40, "temperature_c": 24.0, "weather_code": 61}
+                          for hour in range(17, 23)]}
+    monkeypatch.setattr(main, "get_destination_forecast", forecast)
+    response = client.get(f"/api/floods/{record['location_id']}/assessment")
+    assert response.status_code == 200
+    body = response.json()
+    assert calls == [(record["latitude"], record["longitude"])]
+    assert body["location"]["location_id"] == record["location_id"]
+    assert body["assessment_type"] == "inventory_vulnerability_with_weather_context"
+    assert body["model_score"] is not None and body["model_score"] <= 100
+    assert body["forecast"]["provider"] == "Open-Meteo"
+    assert body["forecast"]["units"]["precipitation"] == "mm"
+    assert len(body["forecast"]["slots"]) == 6
+    assert body["forecast"]["slots"][0]["valid_at"].endswith("+05:30")
+    assert "assumed" in body["model_warning"].lower()
+
+
+def test_unknown_assessment_destination_rejected(monkeypatch):
+    monkeypatch.delenv("DYNAMODB_FLOOD_TABLE", raising=False)
+    assert client.get("/api/floods/not-an-inventory-place/assessment").status_code == 404
+
+
+def test_assessment_forecast_failure_is_honestly_unavailable(monkeypatch):
+    monkeypatch.delenv("DYNAMODB_FLOOD_TABLE", raising=False)
+    record = main.FloodStore().list_records()[0][0]
+    monkeypatch.setattr(main, "get_destination_forecast", lambda *_: (_ for _ in ()).throw(RuntimeError("offline")))
+    response = client.get(f"/api/floods/{record['location_id']}/assessment")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model_score"] is None
+    assert body["model_category"] == "UNAVAILABLE"
+    assert body["forecast"] is None
+    assert body["forecast_error"]

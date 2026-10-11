@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
@@ -16,12 +17,17 @@
     "react": "latest",
     "react-dom": "latest",
     "react-leaflet": "^5.0.0",
+    "react-router-dom": "^7.18.4",
     "typescript": "latest",
     "vite": "latest"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
     "@types/leaflet": "^1.9.22",
     "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0"
+    "@types/react-dom": "^19.3.0",
+    "jsdom": "^30.1.2",
+    "vitest": "^5.0.3"
   }
 }

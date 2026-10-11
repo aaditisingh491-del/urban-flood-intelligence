@@ -4,3 +4,5 @@ httpx
 boto3
 pytest
 python-dotenv
+shapely>=2.0,<3
+tzdata

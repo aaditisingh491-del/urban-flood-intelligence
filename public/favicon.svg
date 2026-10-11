@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" role="img" aria-label="FloodSense">
+  <rect width="40" height="40" rx="11" fill="#17483b"/>
+  <g fill="none" stroke="#e8f5e9" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 13c3.4 0 3.4 2.4 6.8 2.4s3.4-2.4 6.8-2.4 3.4 2.4 6.8 2.4 3.4-2.4 6.8-2.4 3.4 2.4 6.8 2.4"/>
+    <path d="M5 20c3.4 0 3.4 2.4 6.8 2.4s3.4-2.4 6.8-2.4 3.4 2.4 6.8 2.4 3.4-2.4 6.8-2.4 3.4 2.4 6.8 2.4"/>
+    <path d="M5 27c3.4 0 3.4 2.4 6.8 2.4s3.4-2.4 6.8-2.4 3.4 2.4 6.8 2.4 3.4-2.4 6.8-2.4 3.4 2.4 6.8 2.4"/>
+  </g>
+</svg>

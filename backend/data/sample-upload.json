@@ -1,0 +1,29 @@
+{
+  "records": [
+    {
+      "sample_only": true,
+      "location_id": "SAMPLE-ONLY-DO-NOT-INGEST",
+      "location_name": "Illustrative location (not a real report)",
+      "city": "Sample City",
+      "state": "Sample State",
+      "country": "India",
+      "latitude": 12.0,
+      "longitude": 77.0,
+      "event_type": "exposure_location",
+      "severity": null,
+      "status": "unverified",
+      "confidence": "none",
+      "source_name": "Illustrative sample only",
+      "source_url": "https://example.invalid/sample-only",
+      "source_record_id": null,
+      "observed_at": null,
+      "fetched_at": "2026-01-01T00:00:00Z",
+      "last_verified_at": null,
+      "expires_at": null,
+      "rainfall_mm": null,
+      "rainfall_interval": null,
+      "water_level": null,
+      "data_type": "sample_only"
+    }
+  ]
+}
