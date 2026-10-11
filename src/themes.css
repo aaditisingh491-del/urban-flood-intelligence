@@ -306,3 +306,78 @@ html[data-theme="dark"] .route-result strong{color:#e6efeb}
 html[data-theme="light"] .route-comparison-summary{background:#edf7f1;color:#20332e;border-color:#b8d8c5}html[data-theme="light"] .route-comparison-summary strong{color:#21634d}html[data-theme="light"] .route-comparison-summary p{color:#40594f}html[data-theme="light"] .route-comparison-evidence{background:#fff8e8;color:#624b1a;border-color:#e7ce92}
 html[data-theme="light"] .route-select{background:#fff;border-color:#cbd9d1;color:#20332e}html[data-theme="light"] .route-comparison-pair p{background:#f7faf8;border-color:#dce5e0;color:#40594f}html[data-theme="light"] .route-evidence-column{background:transparent;border-color:#dce5e0;color:#40594f}html[data-theme="light"] .route-comparison-pair strong,html[data-theme="light"] .route-evidence-column strong,html[data-theme="light"] .route-evidence-column h4{color:#20332e}html[data-theme="light"] .route-comparison-pair span,html[data-theme="light"] .route-comparison-difference,html[data-theme="light"] .route-comparison-limit{color:#526b61}html[data-theme="light"] .route-evidence-source a{color:#21634d}
 html[data-theme="light"] .route-danger-context{border-color:#dce5e0;color:#40594f}html[data-theme="light"] .route-danger-context h4{color:#20332e}html[data-theme="light"] .route-danger-context small{color:#526b61}
+/* Keep How It Works copy and every map legend label readable in light mode. */
+html[data-theme="light"] .about-compact,
+html[data-theme="light"] .about-compact :is(.section-index, h2, h3, p, b, strong) {
+  color: #20332e;
+}
+html[data-theme="light"] .flood-intelligence .flood-map-legend,
+html[data-theme="light"] .flood-intelligence .flood-map-legend span {
+  color: #20332e;
+}
+
+/* Recommendation cards need their own light surface over the safety panel. */
+html[data-theme="light"] .home-safety-panel .advice {
+  border-color: var(--ui-border);
+  background: var(--ui-surface);
+  color: var(--ui-text);
+}
+html[data-theme="light"] .home-safety-panel .advice:hover,
+html[data-theme="light"] .home-safety-panel .advice[open] {
+  border-color: #a5d6a7;
+  background: var(--ui-surface);
+}
+html[data-theme="light"] .home-safety-panel .advice b {
+  color: var(--ui-heading);
+}
+html[data-theme="light"] .home-safety-panel .advice > summary > div > span,
+html[data-theme="light"] .home-safety-panel .advice > p,
+html[data-theme="light"] .home-safety-panel .advice > summary > svg {
+  color: var(--ui-secondary);
+}
+html[data-theme="light"] .home-safety-panel .advice-icon.amber {
+  background: #fff5df;
+  color: #815a19;
+}
+html[data-theme="light"] .home-safety-panel .advice-icon.red {
+  background: #fff0ed;
+  color: #8c3028;
+}
+html[data-theme="light"] .home-safety-panel .advice-icon.green {
+  background: #e8f2ec;
+  color: #21634d;
+}
+
+/* Keep the forecast panel, timestamps, details, and forecast cards light. */
+html[data-theme="light"] .evening-outlook {
+  border-color: var(--ui-border);
+  background: var(--ui-surface);
+  color: var(--ui-text);
+}
+html[data-theme="light"] .evening-outlook h3 {
+  color: var(--ui-heading);
+}
+html[data-theme="light"] .evening-outlook :is(p, span, small) {
+  color: var(--ui-secondary);
+}
+html[data-theme="light"] .evening-outlook .insight-eyebrow {
+  color: #21634d !important;
+}
+html[data-theme="light"] .evening-outlook .forecast-slots article {
+  border-color: var(--ui-border);
+  background: var(--ui-raised);
+  color: var(--ui-text);
+}
+html[data-theme="light"] .evening-outlook .forecast-slots article > b {
+  color: var(--ui-heading);
+}
+html[data-theme="light"] .evening-outlook a {
+  color: #21634d;
+}
+
+html[data-theme="light"] .hero-proof b {
+  color: var(--ui-heading);
+}
+html[data-theme="light"] .hero-proof small {
+  color: var(--ui-muted);
+}

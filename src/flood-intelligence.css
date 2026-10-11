@@ -6,3 +6,11 @@
 .route-comparison-summary{margin:10px 0;padding:11px;border:1px solid #456257;border-left:4px solid #73b8a8;border-radius:5px;background:#142522;color:#e6efeb;font-size:12px;line-height:1.55}.route-comparison-summary strong{color:#a8dfc8}.route-comparison-summary p{margin:4px 0;color:#d5dedc}.route-comparison-evidence{margin:10px 0;padding:9px 11px;border:1px solid #665b3b;border-radius:5px;background:#211e16;color:#e2d2ab;font-size:11px;line-height:1.5}.route-evidence-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px}.route-evidence-column{min-width:0;padding:9px 0;border-top:1px solid #293943;background:transparent;color:#b8c5c4;font-size:10px;line-height:1.5}.route-evidence-column h4{margin:0 0 6px;color:#d5dedc;font-size:11px}.route-evidence-column p{margin:5px 0}.route-evidence-column strong{color:#e6efeb}.route-evidence-source a{color:#9acfc0}.route-comparison-limit{margin:9px 0;color:#a1b0b5;font-size:9px;line-height:1.4}
 @media(max-width:600px){.route-comparison{padding:10px}.route-comparison-head{flex-direction:column}.route-comparison-pair,.route-evidence-grid{grid-template-columns:1fr}.route-comparison-pair p{align-items:flex-start;flex-direction:column}.route-comparison-pair span{text-align:left}}
 .route-danger-context{display:flex;gap:10px;margin-top:12px;padding-top:10px;border-top:1px solid #293943;color:#b8c5c4;font-size:10px;line-height:1.5}.route-danger-context h4{margin:0 0 5px;color:#e6efeb;font-size:12px}.route-danger-context p{margin:5px 0}.route-danger-context small{display:block;margin-top:4px;color:#a1b0b5}
+/* Keep the source and destination controls aligned when source details wrap. */
+.route-inputs{align-items:start}
+.route-calculate{align-self:start;margin-top:17px;white-space:nowrap}
+.selected-source{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin:8px 0 0;color:#c4d0cd;font-size:10px;line-height:1.5}
+.selected-source>span{min-width:0;overflow-wrap:anywhere}
+.selected-source b{font-weight:600}
+.selected-source button{flex:none;padding:2px 0;border:0;background:transparent;color:#82afcb;font:inherit;text-decoration:underline;cursor:pointer}
+@media(max-width:700px){.route-inputs{grid-template-columns:minmax(0,1fr);align-items:stretch}.route-calculate{width:100%;margin-top:0}}
