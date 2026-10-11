@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CircleMarker, GeoJSON, MapContainer, Popup, TileLayer, useMapEvents } from 'react-leaflet';
+import { CircleMarker, GeoJSON, MapContainer, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import type { LatLngExpression, LeafletMouseEvent } from 'leaflet';
 import { Navigation, Search, CloudRain } from 'lucide-react';
 import SafetyAdvice from './SafetyAdvice';
@@ -8,12 +8,12 @@ import { compareRouteMetrics, recommendComparedRoute, routeDisplayNames, routeMe
 import 'leaflet/dist/leaflet.css';
 import './flood-intelligence.css';
 import './flood-intelligence-controls.css';
+import { placeSearchMessage, usePlaceAutocomplete, type PlaceSuggestion } from './usePlaceAutocomplete';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 type Point = { latitude: number; longitude: number; name?: string };
 type RecordRow = { location_id: string; location_name: string; city: string; state: string; latitude: number; longitude: number; event_type: string; status: string; severity?: string | null; confidence: string; source_name: string; source_url: string; observed_at?: string | null; last_verified_at?: string };
 type Summary = { total_records: number; active_verified_floods: number; official_alerts: number; historical_records: number; rainfall_based_risks: number; exposure_inventory: number; last_successful_ingestion: string | null; storage_mode: string };
-type Suggestion = Point & { name: string };
 type ForecastSlot = { valid_at: string; precipitation_mm: number | null; precipitation_probability_percent: number | null; temperature_c: number | null; weather_code: number | null };
 type Forecast = { provider: string; attribution: string; timezone: string; generated_at: string; units: { precipitation: string; precipitation_probability: string; temperature: string }; slots: ForecastSlot[] };
 type Assessment = { location: { location_id: string; location_name: string; city: string; state: string; inventory_status: string; inventory_confidence: string; inventory_source: string; inventory_source_url: string; latitude: number; longitude: number }; model_score: number | null; model_category: string; model_status: string; model_warning: string; current_verified_incidents_within_1km: number; current_verified_incident_sources: string[]; assessed_at: string; data_source: string; forecast: Forecast | null; forecast_error: string | null };
@@ -24,6 +24,14 @@ const duration = (value?: number) => value == null ? '—' : `${Math.round(value
 
 function MapSourceClick({ onSelect }: { onSelect: (point: Point) => void }) {
   useMapEvents({ click(event: LeafletMouseEvent) { onSelect({ latitude: event.latlng.lat, longitude: event.latlng.lng }); } });
+  return null;
+}
+
+function FollowSelectedSource({ source }: { source: Point | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (source) map.flyTo([source.latitude, source.longitude], Math.max(map.getZoom(), 14), { duration: 0.35 });
+  }, [map, source]);
   return null;
 }
 
@@ -54,13 +62,11 @@ export default function FloodIntelligence({ onEmergencyContextChange }: { onEmer
   const [serviceArea, setServiceArea] = useState<GeoJSON.GeoJsonObject | null>(null);
   const [destinationId, setDestinationId] = useState('');
   const destination = destinations.find(row => row.location_id === destinationId) || null;
-  const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
-  const [searchNotice, setSearchNotice] = useState('');
+  const autocomplete = usePlaceAutocomplete(originText);
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const searchTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/floods/summary`).then(r => r.ok ? r.json() : null).then(setSummary).catch(() => setSummary(null));
@@ -125,34 +131,25 @@ export default function FloodIntelligence({ onEmergencyContextChange }: { onEmer
 
   async function search(text: string) {
     setOriginText(text); setOrigin(null); setRoute(null);
-    setSearchNotice(''); setError('');
-    window.clearTimeout(searchTimer.current);
-    if (text.trim().length < 2) { setSuggestions(null); return; }
-    searchTimer.current = window.setTimeout(async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/geocode?q=${encodeURIComponent(text)}`);
-        if (!response.ok) throw new Error();
-        const data = await response.json(); setSuggestions(data.results);
-        if (data.results.length === 0) setSearchNotice('Please select a location within Bengaluru.');
-      } catch { setSuggestions([]); setSearchNotice('Place search is unavailable right now. Please retry.'); }
-    }, 350);
+    setError('');
   }
-  function chooseOrigin(item: Suggestion) {
-    setOrigin(item); setOriginText(item.name); setSuggestions(null); setSearchNotice(''); setRoute(null); setError('');
+  function chooseOrigin(item: PlaceSuggestion) {
+    setOrigin(item); setOriginText(item.name); autocomplete.reset(item.name); setRoute(null); setError('');
   }
   async function chooseMapSource(point: Point) {
-    setOrigin(null); setOriginText('Checking map selection…'); setRoute(null); setError(''); setSuggestions(null); setSearchNotice('');
+    setOrigin(null); setOriginText('Checking map selection…'); setRoute(null); setError(''); autocomplete.reset('Checking map selection…');
     try {
       const response = await fetch(`${API_BASE}/api/locations/validate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(point) });
       const body = await response.json();
       if (!response.ok || body.valid !== true) throw new Error(body.detail || 'Please select a location within Bengaluru.');
       const selected = { latitude: body.latitude, longitude: body.longitude, name: `Map selection (${body.latitude.toFixed(5)}, ${body.longitude.toFixed(5)})` };
       setOrigin(selected); setOriginText(selected.name);
+      autocomplete.reset(selected.name);
     } catch (e) {
       setOriginText(''); setError(e instanceof Error ? e.message : 'Please select a location within Bengaluru.');
     }
   }
-  function changeSource() { setOrigin(null); setOriginText(''); setSuggestions(null); setSearchNotice(''); setRoute(null); }
+  function changeSource() { setOrigin(null); setOriginText(''); autocomplete.reset(); setRoute(null); }
   function chooseDestination(id: string) { setDestinationId(id); setRoute(null); setAssessment(null); setAssessmentError(''); }
   async function calculateRoute() {
     if (!origin || !destination) { setError('Choose an origin by search and a destination from the flood-prone inventory.'); return; }
@@ -184,10 +181,15 @@ export default function FloodIntelligence({ onEmergencyContextChange }: { onEmer
   return <section className="flood-intelligence" aria-label="Flood intelligence and risk-aware routing">
     <div className="flood-heading"><div><span className="eyebrow">FLOOD INTELLIGENCE</span><h2>Bengaluru route planner</h2><p>Choose an origin and an inventory destination. Vulnerability points are not current incident reports.</p></div><small>{summary?.storage_mode === 'dynamodb' ? 'DynamoDB connected' : 'Bengaluru service area'}</small></div>
     <div className="route-inputs">
-      <div className="route-search"><label htmlFor="flood-origin">Source (Bengaluru only)</label><div><Search size={15} /><input id="flood-origin" value={originText} onChange={e => search(e.target.value)} placeholder="Search a Bengaluru locality, landmark, or address" autoComplete="off" aria-autocomplete="list" aria-controls="origin-suggestions" aria-expanded={Boolean(suggestions?.length)} /></div>
+      <div className="route-search"><label htmlFor="flood-origin">Source (Bengaluru only)</label><div><Search size={15} /><input id="flood-origin" value={originText} onChange={e => search(e.target.value)} onKeyDown={event => {
+        if (event.key === 'ArrowDown' && autocomplete.suggestions.length) { event.preventDefault(); autocomplete.moveActive(1); }
+        else if (event.key === 'ArrowUp' && autocomplete.suggestions.length) { event.preventDefault(); autocomplete.moveActive(-1); }
+        else if (event.key === 'Enter' && autocomplete.activeIndex >= 0) { event.preventDefault(); chooseOrigin(autocomplete.suggestions[autocomplete.activeIndex]); }
+        else if (event.key === 'Escape') autocomplete.reset();
+      }} placeholder="Search a Bengaluru locality, landmark, or address" autoComplete="off" role="combobox" aria-autocomplete="list" aria-controls="origin-suggestions" aria-expanded={autocomplete.suggestions.length > 0} aria-activedescendant={autocomplete.activeIndex >= 0 ? `origin-option-${autocomplete.activeIndex}` : undefined} /></div>
         {origin && <p className="selected-source"><span>Selected source: <b>{origin.name}</b></span><button type="button" onClick={changeSource}>Change source</button></p>}
-        {suggestions && suggestions.length > 0 && <ul className="place-suggestions" id="origin-suggestions" role="listbox">{suggestions.map((item, i) => <li key={`${item.latitude}-${item.longitude}-${i}`} role="option"><button type="button" onClick={() => chooseOrigin(item)}>{item.name}</button></li>)}</ul>}
-        {searchNotice && <p className="origin-search-notice" role="status">{searchNotice}</p>}
+        {autocomplete.suggestions.length > 0 && <ul className="place-suggestions" id="origin-suggestions" role="listbox">{autocomplete.suggestions.map((item, i) => <li key={`${item.latitude}-${item.longitude}-${i}`}><button id={`origin-option-${i}`} role="option" aria-selected={autocomplete.activeIndex === i} type="button" className={autocomplete.activeIndex === i ? 'active' : ''} onMouseDown={event => event.preventDefault()} onClick={event => { event.stopPropagation(); chooseOrigin(item); }}>{item.name}</button></li>)}</ul>}
+        {placeSearchMessage(autocomplete.state, autocomplete.error) && <p className="origin-search-notice" role={autocomplete.state === 'error' ? 'alert' : 'status'}>{placeSearchMessage(autocomplete.state, autocomplete.error)}</p>}
       </div>
       <div className="route-search"><label htmlFor="flood-destination">Destination (flood-prone inventory only)</label><select id="flood-destination" value={destinationId} onChange={e => chooseDestination(e.target.value)} disabled={!inventoryReady || destinations.length === 0}><option value="">{!inventoryReady ? 'Loading inventory…' : destinations.length ? 'Select an inventory location' : 'No inventory locations available'}</option>{destinations.map(row => <option key={row.location_id} value={row.location_id}>{row.location_name} — {row.city}, {row.state}</option>)}</select></div>
       <button className="route-calculate" onClick={calculateRoute} disabled={busy || !inventoryReady || !origin || !destination}><Navigation size={15} />{busy ? 'Finding routes…' : 'Find route'}</button>
@@ -196,7 +198,7 @@ export default function FloodIntelligence({ onEmergencyContextChange }: { onEmer
     {inventoryError && <p className="flood-error" role="alert">{inventoryError}</p>}
     {error && <p className="flood-error" role="alert">{error}<button type="button" onClick={() => setError('')}>Dismiss</button><button type="button" onClick={() => void calculateRoute()} disabled={busy || !origin || !destination}>Retry</button></p>}
     <div className="flood-map"><MapContainer center={mapCenter} zoom={12} scrollWheelZoom zoomControl className="interactive-map" aria-label="Flood inventory and route display map">
-      <MapSourceClick onSelect={chooseMapSource}/><TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      <FollowSelectedSource source={origin}/><MapSourceClick onSelect={chooseMapSource}/><TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
       {serviceArea && <GeoJSON data={serviceArea} style={{ color: '#73b8a8', weight: 2, fillOpacity: .04, dashArray: '5 4' }} />}
       {records.map(r => { const color = r.status === 'active' ? (r.severity === 'critical' || r.severity === 'high' ? '#e98570' : '#e2b56e') : r.event_type === 'historical_flood' ? '#82afcb' : r.event_type === 'rainfall_based_risk' ? '#9c8ad1' : '#e2b56e'; return <CircleMarker key={r.location_id} center={[r.latitude, r.longitude]} radius={r.status === 'active' ? 7 : 5} pathOptions={{ color, fillColor: color, fillOpacity: .68, weight: 1 }}><Popup><strong>{r.location_name}</strong><br/>{r.city}, {r.state}<br/>{r.event_type.replace(/_/g, ' ')} · {r.status}<br/>Severity: {r.severity || 'not supplied'} · Confidence: {r.confidence}<br/>Observed: {r.observed_at || 'not supplied'} · Retrieved: {r.last_verified_at || 'not verified'}<br/><a href={r.source_url} target="_blank" rel="noreferrer">{r.source_name}</a></Popup></CircleMarker>; })}
       {origin && <CircleMarker center={[origin.latitude, origin.longitude]} radius={8} pathOptions={{ color: '#73b8a8', fillColor: '#73b8a8', fillOpacity: .95 }}><Popup>Selected origin</Popup></CircleMarker>}

@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import FloodIntelligence from './FloodIntelligence';
 import SafetyAdvice from './SafetyAdvice';
 
-const mapMock = vi.hoisted(() => ({ handlers: null as null | { click: (event: { latlng: { lat: number; lng: number } }) => void } }));
+const mapMock = vi.hoisted(() => ({ handlers: null as null | { click: (event: { latlng: { lat: number; lng: number } }) => void }, flyTo: vi.fn(), getZoom: vi.fn(() => 12) }));
 vi.mock('react-leaflet', () => ({
   MapContainer: ({ children }: { children: ReactNode }) => <div data-testid="map">{children}</div>,
   TileLayer: () => <span />,
@@ -12,6 +12,7 @@ vi.mock('react-leaflet', () => ({
   Popup: ({ children }: { children: ReactNode }) => <span>{children}</span>,
   GeoJSON: ({ style }: { style?: { color?: string } }) => <span data-testid="route-geometry" data-route-color={style?.color} />,
   useMapEvents: (handlers: typeof mapMock.handlers) => { mapMock.handlers = handlers; return null; },
+  useMap: () => ({ flyTo: mapMock.flyTo, getZoom: mapMock.getZoom }),
 }));
 
 const row = { location_id: 'loc-1', location_name: 'Low-lying ward', city: 'Bengaluru', state: 'Karnataka',
@@ -47,7 +48,7 @@ function mockFetch() {
 }
 
 describe('FloodIntelligence', () => {
-  beforeEach(() => { mapMock.handlers = null; });
+  beforeEach(() => { mapMock.handlers = null; mapMock.flyTo.mockClear(); });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it('loads source-backed records and renders inventory markers', async () => {
@@ -70,9 +71,30 @@ describe('FloodIntelligence', () => {
     mockFetch(); render(<FloodIntelligence />);
     await screen.findAllByText('Low-lying ward');
     fireEvent.change(screen.getByLabelText('Source (Bengaluru only)'), { target: { value: 'Koramangala' } });
-    const suggestion = await screen.findByRole('button', { name: 'Koramangala' }, { timeout: 1500 });
+    const suggestion = await screen.findByRole('option', { name: 'Koramangala' }, { timeout: 1500 });
     fireEvent.click(suggestion);
     expect(screen.getByLabelText('Source (Bengaluru only)')).toHaveValue('Koramangala');
+    expect(mapMock.flyTo).toHaveBeenCalledWith([12.95, 77.61], 14, { duration: 0.35 });
+  });
+
+  it('selects source autocomplete suggestions with the keyboard and reports provider errors', async () => {
+    mockFetch(); render(<FloodIntelligence />);
+    await screen.findAllByText('Low-lying ward');
+    const source = screen.getByRole('combobox', { name: 'Source (Bengaluru only)' });
+    fireEvent.change(source, { target: { value: 'Koramangala' } });
+    await screen.findByRole('option', { name: 'Koramangala' });
+    fireEvent.keyDown(source, { key: 'ArrowDown' });
+    expect(source).toHaveAttribute('aria-activedescendant', 'origin-option-0');
+    fireEvent.keyDown(source, { key: 'Enter' });
+    expect(source).toHaveValue('Koramangala');
+    expect(screen.getByText('Koramangala', { selector: 'b' })).toBeInTheDocument();
+    const original = vi.mocked(globalThis.fetch).getMockImplementation();
+    vi.mocked(globalThis.fetch).mockImplementation(async input => String(input).includes('/api/geocode')
+      ? new Response(JSON.stringify({ detail: 'Place search is unavailable.' }), { status: 502 })
+      : original!(input));
+    fireEvent.change(source, { target: { value: 'unknown place' } });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Place search is unavailable.');
+    expect(screen.getByRole('button', { name: 'Find route' })).toBeDisabled();
   });
 
   it('restricts destinations to inventory and shows route danger results', async () => {
@@ -81,7 +103,7 @@ describe('FloodIntelligence', () => {
     expect(screen.getByText(/map clicks never set a destination/i)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Destination (flood-prone inventory only)'), { target: { value: 'loc-1' } });
     fireEvent.change(screen.getByLabelText('Source (Bengaluru only)'), { target: { value: 'Koramangala' } });
-    fireEvent.click(await screen.findByRole('button', { name: 'Koramangala' }, { timeout: 1500 }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Koramangala' }, { timeout: 1500 }));
     fireEvent.click(screen.getByRole('button', { name: 'Find route' }));
     expect(await screen.findByText(/No fresh verified flood reports are mapped near this candidate/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Why this road is dangerous' })).toBeInTheDocument();
@@ -118,7 +140,7 @@ describe('FloodIntelligence', () => {
     await screen.findByRole('option', { name: /Low-lying ward/ });
     fireEvent.change(screen.getByLabelText('Destination (flood-prone inventory only)'), { target: { value: 'loc-1' } });
     fireEvent.change(screen.getByLabelText('Source (Bengaluru only)'), { target: { value: 'Koramangala' } });
-    fireEvent.click(await screen.findByRole('button', { name: 'Koramangala' }, { timeout: 1500 }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Koramangala' }, { timeout: 1500 }));
     fireEvent.click(screen.getByRole('button', { name: 'Find route' }));
     const comparison = await screen.findByRole('region', { name: 'Flood-aware route comparison' });
     expect(screen.getAllByRole('region', { name: 'Flood-aware route comparison' })).toHaveLength(1);
@@ -159,7 +181,7 @@ describe('FloodIntelligence', () => {
     await screen.findByRole('option', { name: /Low-lying ward/ });
     fireEvent.change(screen.getByLabelText('Destination (flood-prone inventory only)'), { target: { value: 'loc-1' } });
     fireEvent.change(screen.getByLabelText('Source (Bengaluru only)'), { target: { value: 'Koramangala' } });
-    fireEvent.click(await screen.findByRole('button', { name: 'Koramangala' }, { timeout: 1500 }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Koramangala' }, { timeout: 1500 }));
     fireEvent.click(screen.getByRole('button', { name: 'Find route' }));
     expect(await screen.findByText('The routing provider timed out. Please retry.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
@@ -201,7 +223,7 @@ describe('FloodIntelligence', () => {
     await act(async () => { mapMock.handlers?.click({ latlng: { lat: 12.9716, lng: 77.5946 } }); });
     expect(await screen.findByText('Map selection (12.97160, 77.59460)')).toBeInTheDocument();
     await act(async () => { mapMock.handlers?.click({ latlng: { lat: 28.6139, lng: 77.209 } }); });
-    expect(await screen.findByText('Please select a location within Bengaluru.')).toBeInTheDocument();
+    expect(await screen.findByText(/Please select a location within Bengaluru/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Find route' })).toBeDisabled();
   });
 
@@ -209,7 +231,7 @@ describe('FloodIntelligence', () => {
     mockFetch(); render(<FloodIntelligence />);
     await screen.findAllByText('Low-lying ward');
     fireEvent.change(screen.getByLabelText('Source (Bengaluru only)'), { target: { value: 'Delhi' } });
-    expect(await screen.findByText('Please select a location within Bengaluru.')).toBeInTheDocument();
+    expect(await screen.findByText(/No matching place found in Bengaluru/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Find route' })).toBeDisabled();
   });
 

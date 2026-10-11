@@ -25,7 +25,7 @@ function mockAlertFetch(outside = false) {
 }
 
 async function saveOneLocation() {
-  fireEvent.change(screen.getByRole('searchbox', { name: /Find a Bengaluru place/ }), { target: { value: 'Central Bengaluru' } });
+  fireEvent.change(screen.getByRole('combobox', { name: /Find a Bengaluru place/ }), { target: { value: 'Central Bengaluru' } });
   fireEvent.click(await screen.findByRole('option', { name: /Central Bengaluru, Karnataka, India/ }, { timeout: 2000 }));
   fireEvent.change(screen.getByLabelText('Name this saved location'), { target: { value: 'Home area' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save location' }));
@@ -38,10 +38,40 @@ describe('Smart Flood Alerts', () => {
     const view = renderAlerts();
     await saveOneLocation();
     expect(calls.mock.calls.some(([url, init]) => String(url).includes('/api/locations/validate') && init?.method === 'POST')).toBe(true);
-    expect(JSON.parse(localStorage.getItem('floodsense-alert-locations-v1') || '[]')[0]).toMatchObject({ name: 'Home area', latitude: 12.9716, monitored: true });
+    expect(JSON.parse(localStorage.getItem('floodsense-alert-locations-v1') || '[]')[0]).toMatchObject({ name: 'Home area', address: 'Central Bengaluru, Karnataka, India', latitude: 12.9716, longitude: 77.5946, monitored: true });
     expect(calls.mock.calls.some(([url]) => String(url).includes('/api/locations/forecast'))).toBe(false);
     view.unmount(); renderAlerts();
     expect(screen.getByText('Home area')).toBeVisible();
+  });
+
+  it('supports keyboard autocomplete, saves selected coordinates and uses them for monitoring', async () => {
+    const calls = mockAlertFetch(); renderAlerts();
+    const search = screen.getByRole('combobox', { name: /Find a Bengaluru place/ });
+    fireEvent.change(search, { target: { value: 'Central Bengaluru' } });
+    await screen.findByRole('option', { name: /Central Bengaluru, Karnataka, India/ });
+    fireEvent.keyDown(search, { key: 'ArrowDown' });
+    expect(search).toHaveAttribute('aria-activedescendant', 'alerts-place-option-0');
+    fireEvent.keyDown(search, { key: 'Enter' });
+    expect(screen.getByText('Central Bengaluru, Karnataka, India', { selector: 'strong' })).toBeVisible();
+    fireEvent.change(screen.getByLabelText('Name this saved location'), { target: { value: 'Home area' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save location' }));
+    await screen.findByText('Home area');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh alerts' }));
+    await screen.findByText(/FORECAST-BASED ALERT · NOT A FLOOD REPORT/);
+    const forecastCall = calls.mock.calls.find(([url]) => String(url).includes('/api/locations/forecast'));
+    expect(String(forecastCall?.[0])).toContain('latitude=12.9716');
+    expect(String(forecastCall?.[0])).toContain('longitude=77.5946');
+  });
+
+  it('shows a useful message when place search fails', async () => {
+    const fetchMock = mockAlertFetch();
+    fetchMock.mockImplementation(async (input, init) => String(input).includes('/api/geocode')
+      ? new Response(JSON.stringify({ detail: 'Geocoding service is unavailable.' }), { status: 502 })
+      : new Response('{}', { status: 404 }));
+    renderAlerts();
+    fireEvent.change(screen.getByRole('combobox', { name: /Find a Bengaluru place/ }), { target: { value: 'Some place' } });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Geocoding service is unavailable.');
+    expect(screen.queryByRole('button', { name: 'Save location' })).not.toBeInTheDocument();
   });
 
   it('persists configured threshold values across page remounts', async () => {
@@ -77,7 +107,7 @@ describe('Smart Flood Alerts', () => {
 
   it('rejects a geocoder result outside Bengaluru at the backend validation step', async () => {
     const calls = mockAlertFetch(true); renderAlerts();
-    fireEvent.change(screen.getByRole('searchbox', { name: /Find a Bengaluru place/ }), { target: { value: 'Central Bengaluru' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /Find a Bengaluru place/ }), { target: { value: 'Central Bengaluru' } });
     fireEvent.click(await screen.findByRole('option', { name: /Central Bengaluru, Karnataka, India/ }, { timeout: 2000 }));
     fireEvent.click(screen.getByRole('button', { name: 'Save location' }));
     expect(await screen.findByText(/select a location within Bengaluru/i)).toBeVisible();

@@ -249,13 +249,37 @@ def verified_active_records(records: list[dict[str, Any]], now: datetime | None 
 
 def geocode(query: str) -> list[dict[str, Any]]:
     try:
-        response = httpx.get(GEOCODING_URL, params={"name": query, "count": 6, "language": "en", "format": "json"}, timeout=8)
-        response.raise_for_status()
-        results = [{"name": f"{p['name']}, {p.get('admin1', '')}, {p.get('country', '')}".strip(", "),
-                 "latitude": float(p["latitude"]), "longitude": float(p["longitude"]),
-                 "country": p.get("country"), "admin1": p.get("admin1")}
-                for p in response.json().get("results", [])]
-        return [result for result in results if is_in_bengaluru(result["latitude"], result["longitude"])]
+        # Open-Meteo's `name` search does not reliably accept comma-delimited
+        # address strings (e.g. "Whitefield, Bengaluru"). Try the user's full
+        # query first, then its locality component; the service-area polygon
+        # below remains the authority on which results can be selected.
+        queries = [query.strip()]
+        locality = query.split(",", 1)[0].strip()
+        if locality and locality.casefold() != query.strip().casefold():
+            queries.append(locality)
+        for search_term in queries:
+            response = httpx.get(GEOCODING_URL, params={"name": search_term, "count": 10, "language": "en", "format": "json"}, timeout=8)
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict) or not isinstance(payload.get("results", []), list):
+                raise ValueError("Open-Meteo geocoding response has an invalid results field")
+            results = []
+            seen: set[tuple[float, float]] = set()
+            for p in payload.get("results", []):
+                try:
+                    latitude, longitude = float(p["latitude"]), float(p["longitude"])
+                    name = f"{p['name']}, {p.get('admin1', '')}, {p.get('country', '')}".strip(", ")
+                except (KeyError, TypeError, ValueError):
+                    continue
+                point_key = (round(latitude, 6), round(longitude, 6))
+                if point_key in seen or not is_in_bengaluru(latitude, longitude):
+                    continue
+                seen.add(point_key)
+                results.append({"name": name, "latitude": latitude, "longitude": longitude,
+                                "country": p.get("country"), "admin1": p.get("admin1")})
+            if results:
+                return results
+        return []
     except (httpx.HTTPError, KeyError, ValueError) as exc:
         raise HTTPException(status_code=502, detail="Geocoding service is unavailable") from exc
 

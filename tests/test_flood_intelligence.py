@@ -45,6 +45,39 @@ def test_geocoder_filters_ambiguous_and_out_of_area_results(monkeypatch):
     assert results[0]["latitude"] == 12.9716
 
 
+def test_geocoder_retries_locality_when_comma_delimited_query_is_empty(monkeypatch):
+    requests = []
+    class Response:
+        def __init__(self, results): self.results = results
+        def raise_for_status(self): pass
+        def json(self): return {"results": self.results}
+    def fake_get(_url, *, params, timeout):
+        requests.append(params["name"])
+        if params["name"] == "Whitefield, Bengaluru": return Response([])
+        return Response([{"name": "Whitefield", "latitude": 12.97159, "longitude": 77.74732,
+                          "admin1": "Karnataka", "country": "India"}])
+    monkeypatch.setattr(fi.httpx, "get", fake_get)
+    matches = fi.geocode("Whitefield, Bengaluru")
+    assert requests == ["Whitefield, Bengaluru", "Whitefield"]
+    assert len(matches) == 1
+    assert matches[0]["name"] == "Whitefield, Karnataka, India"
+    assert fi.is_in_bengaluru(matches[0]["latitude"], matches[0]["longitude"])
+
+
+def test_geocode_endpoint_distinguishes_no_match_from_provider_failure(monkeypatch):
+    monkeypatch.setattr(main, "geocode", lambda _query: [])
+    empty = client.get("/api/geocode?q=NoSuchPlace")
+    assert empty.status_code == 200
+    assert empty.json()["results"] == []
+    assert "No matching result" in empty.json()["message"]
+
+    def unavailable(_query): raise HTTPException(status_code=502, detail="Geocoding service is unavailable")
+    monkeypatch.setattr(main, "geocode", unavailable)
+    failed = client.get("/api/geocode?q=Whitefield")
+    assert failed.status_code == 502
+    assert failed.json()["detail"] == "Geocoding service is unavailable"
+
+
 def test_flood_api_paginates_and_summarizes_inventory(monkeypatch):
     monkeypatch.delenv("DYNAMODB_FLOOD_TABLE", raising=False)
     response = client.get("/api/floods?page=1&page_size=7&event_type=exposure_location")

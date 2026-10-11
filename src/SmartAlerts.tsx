@@ -5,6 +5,7 @@ import ThemeToggle from './theme';
 import { evaluateSixHourThreshold, forecastAlertId, isForecastStale, requestAlertNotificationPermission, type AlertThresholds, type HourlyForecastSlot } from './alertLogic';
 import EmergencyModeControl from './EmergencyMode';
 import './smart-alerts.css';
+import { placeSearchMessage, usePlaceAutocomplete, type PlaceSuggestion } from './usePlaceAutocomplete';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 const LOCATIONS_KEY = 'floodsense-alert-locations-v1';
@@ -13,17 +14,16 @@ const ALERTS_KEY = 'floodsense-alert-history-v1';
 const NOTIFICATIONS_KEY = 'floodsense-alert-notifications-v1';
 const MAX_LOCATIONS = 12;
 
-type SavedLocation = { id: string; name: string; latitude: number; longitude: number; monitored: boolean };
+type SavedLocation = { id: string; name: string; address?: string; latitude: number; longitude: number; monitored: boolean };
 type AlertItem = { id: string; locationId: string; locationName: string; startAt: string; endAt: string; triggerAt: string; rainfallMm: number; probabilityPercent: number; rainfallThresholdMm: number; probabilityThresholdPercent: number; fetchedAt: string; dismissed: boolean };
 type CheckState = { fetchedAt?: string; provider?: string; stale?: boolean; error?: string; triggerMet?: boolean; unavailable?: string };
-type Suggestion = { name: string; latitude: number; longitude: number };
 type ForecastResponse = { forecast?: { generated_at?: string; provider?: string; attribution?: string; timezone?: string; units?: { precipitation?: string; precipitation_probability?: string }; slots?: HourlyForecastSlot[] } };
 
 function readJson<T>(key: string, fallback: T, validate: (value: unknown) => value is T): T {
   try { const value: unknown = JSON.parse(localStorage.getItem(key) || 'null'); return validate(value) ? value : fallback; }
   catch { return fallback; }
 }
-const validLocations = (value: unknown): value is SavedLocation[] => Array.isArray(value) && value.every(row => row && typeof row.id === 'string' && typeof row.name === 'string' && Number.isFinite(row.latitude) && Number.isFinite(row.longitude) && typeof row.monitored === 'boolean');
+const validLocations = (value: unknown): value is SavedLocation[] => Array.isArray(value) && value.every(row => row && typeof row.id === 'string' && typeof row.name === 'string' && (row.address === undefined || typeof row.address === 'string') && Number.isFinite(row.latitude) && Number.isFinite(row.longitude) && typeof row.monitored === 'boolean');
 const validAlerts = (value: unknown): value is AlertItem[] => Array.isArray(value) && value.every(row => row && typeof row.id === 'string' && typeof row.locationName === 'string' && typeof row.startAt === 'string' && typeof row.dismissed === 'boolean');
 const validSettings = (value: unknown): value is AlertThresholds => Boolean(value && typeof value === 'object' && Number.isFinite((value as AlertThresholds).rainfallMm) && (value as AlertThresholds).rainfallMm >= 0 && Number.isFinite((value as AlertThresholds).probabilityPercent) && (value as AlertThresholds).probabilityPercent >= 0 && (value as AlertThresholds).probabilityPercent <= 100);
 function readNotificationPreference(): boolean { try { return localStorage.getItem(NOTIFICATIONS_KEY) === 'true'; } catch { return false; } }
@@ -36,35 +36,16 @@ export default function SmartAlerts() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(readNotificationPreference);
   const [notificationNotice, setNotificationNotice] = useState('');
   const [query, setQuery] = useState('');
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const autocomplete = usePlaceAutocomplete(query);
   const [searchMessage, setSearchMessage] = useState('');
-  const [selected, setSelected] = useState<Suggestion | null>(null);
+  const [selected, setSelected] = useState<PlaceSuggestion | null>(null);
   const [locationName, setLocationName] = useState('');
   const [saving, setSaving] = useState(false);
-  const [searching, setSearching] = useState(false);
   const [checks, setChecks] = useState<Record<string, CheckState>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState('');
-  const timer = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (timer.current != null) window.clearTimeout(timer.current);
-    setSelected(null); setSuggestions([]); setSearchMessage('');
-    if (query.trim().length < 2) { setSearching(false); return; }
-    setSearching(true);
-    timer.current = window.setTimeout(async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/geocode?q=${encodeURIComponent(query.trim())}`);
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.detail || 'Place search is unavailable.');
-        setSuggestions(Array.isArray(body.results) ? body.results : []);
-        if (!body.results?.length) setSearchMessage('Please select a location within Bengaluru. No matching place was found.');
-      } catch (error) { setSuggestions([]); setSearchMessage(error instanceof Error ? error.message : 'Place search is unavailable.'); }
-      finally { setSearching(false); }
-    }, 350);
-    return () => { if (timer.current != null) window.clearTimeout(timer.current); };
-  }, [query]);
+  useEffect(() => { setSelected(null); setSearchMessage(''); }, [query]);
 
   useEffect(() => { try { localStorage.setItem(LOCATIONS_KEY, JSON.stringify(locations)); } catch { /* Storage may be unavailable. */ } }, [locations]);
   useEffect(() => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* Storage may be unavailable. */ } }, [settings]);
@@ -80,8 +61,8 @@ export default function SmartAlerts() {
       const body = await response.json();
       if (!response.ok || body.valid !== true) throw new Error(body.detail || 'Select a location inside Bengaluru.');
       const id = `${Number(body.latitude).toFixed(5)},${Number(body.longitude).toFixed(5)}`;
-      setLocations(current => current.some(location => location.id === id) ? current.map(location => location.id === id ? { ...location, name: locationName.trim() } : location) : [...current, { id, name: locationName.trim(), latitude: body.latitude, longitude: body.longitude, monitored: true }]);
-      setQuery(''); setSelected(null); setLocationName(''); setSuggestions([]); setSearchMessage('Location saved on this browser. Forecasts run only when you choose Refresh alerts.');
+      setLocations(current => current.some(location => location.id === id) ? current.map(location => location.id === id ? { ...location, name: locationName.trim(), address: selected.name } : location) : [...current, { id, name: locationName.trim(), address: selected.name, latitude: body.latitude, longitude: body.longitude, monitored: true }]);
+      setQuery(''); setSelected(null); setLocationName(''); autocomplete.reset(); setSearchMessage('Location saved on this browser. Forecasts run only when you choose Refresh alerts.');
     } catch (error) { setSearchMessage(error instanceof Error ? error.message : 'Location could not be validated.'); }
     finally { setSaving(false); }
   }
@@ -144,14 +125,19 @@ export default function SmartAlerts() {
     <section className="alerts-panel" aria-labelledby="save-location-title">
       <div className="alerts-section-heading"><div><MapPin size={19}/><h2 id="save-location-title">Your saved locations</h2></div><span>Stored only in this browser</span></div>
       <p className="alerts-local-note">Search and save only places you choose. Coordinates and preferences stay in this browser’s local storage and are sent to FloodSense only when you manually refresh forecasts.</p>
-      <div className="alerts-save-form"><label htmlFor="alerts-place-search">Find a Bengaluru place</label><input id="alerts-place-search" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search locality, landmark, or address" autoComplete="off" aria-autocomplete="list" aria-controls="alerts-place-options" aria-expanded={suggestions.length > 0}/>
-        {searching && <p role="status">Searching within Bengaluru…</p>}
-        {suggestions.length > 0 && <ul id="alerts-place-options" role="listbox">{suggestions.map((suggestion, index) => <li key={`${suggestion.latitude}-${suggestion.longitude}-${index}`}><button type="button" role="option" aria-selected="false" onClick={() => { setSelected(suggestion); setLocationName(suggestion.name.split(',')[0]); setSuggestions([]); setSearchMessage(''); }}>{suggestion.name}</button></li>)}</ul>}
+      <div className="alerts-save-form"><label htmlFor="alerts-place-search">Find a Bengaluru place</label><input id="alerts-place-search" type="search" role="combobox" value={query} onChange={event => { setSelected(null); setLocationName(''); setSearchMessage(''); setQuery(event.target.value); }} onKeyDown={event => {
+        if (event.key === 'ArrowDown' && autocomplete.suggestions.length) { event.preventDefault(); autocomplete.moveActive(1); }
+        else if (event.key === 'ArrowUp' && autocomplete.suggestions.length) { event.preventDefault(); autocomplete.moveActive(-1); }
+        else if (event.key === 'Enter' && autocomplete.activeIndex >= 0) { event.preventDefault(); const suggestion = autocomplete.suggestions[autocomplete.activeIndex]; setSelected(suggestion); setLocationName(suggestion.name.split(',')[0]); autocomplete.reset(); setSearchMessage(''); }
+        else if (event.key === 'Escape') autocomplete.reset();
+      }} placeholder="Search locality, landmark, or address" autoComplete="off" aria-autocomplete="list" aria-controls="alerts-place-options" aria-expanded={autocomplete.suggestions.length > 0} aria-activedescendant={autocomplete.activeIndex >= 0 ? `alerts-place-option-${autocomplete.activeIndex}` : undefined}/>
+        {placeSearchMessage(autocomplete.state, autocomplete.error) && <p role={autocomplete.state === 'error' ? 'alert' : 'status'}>{placeSearchMessage(autocomplete.state, autocomplete.error)}</p>}
+        {autocomplete.suggestions.length > 0 && <ul id="alerts-place-options" role="listbox">{autocomplete.suggestions.map((suggestion, index) => <li key={`${suggestion.latitude}-${suggestion.longitude}-${index}`}><button id={`alerts-place-option-${index}`} role="option" aria-selected={autocomplete.activeIndex === index} className={autocomplete.activeIndex === index ? 'active' : ''} type="button" onMouseDown={event => event.preventDefault()} onClick={event => { event.stopPropagation(); setSelected(suggestion); setLocationName(suggestion.name.split(',')[0]); autocomplete.reset(); setSearchMessage(''); }}>{suggestion.name}</button></li>)}</ul>}
         {selected && <div className="alerts-selected-place"><p>Selected place: <strong>{selected.name}</strong></p><label htmlFor="alerts-location-name">Name this saved location</label><input id="alerts-location-name" value={locationName} maxLength={80} onChange={event => setLocationName(event.target.value)}/><button type="button" onClick={() => void saveLocation()} disabled={saving || !locationName.trim() || locations.length >= MAX_LOCATIONS}><Plus size={15}/>{saving ? 'Validating…' : 'Save location'}</button></div>}
         {searchMessage && <p role="status" className="alerts-message">{searchMessage}</p>}
       </div>
       {!locations.length ? <p className="alerts-empty">No locations saved. Search for a Bengaluru place above and save it to configure alerts.</p> : <ul className="saved-location-list">{locations.map(location => <li key={location.id}>
-        <label className="monitor-toggle"><input type="checkbox" checked={location.monitored} onChange={event => updateLocation(location.id, { monitored: event.target.checked })}/><span><strong>{location.name}</strong><small>{location.latitude.toFixed(4)}, {location.longitude.toFixed(4)} · Bengaluru service area</small></span></label>
+        <label className="monitor-toggle"><input type="checkbox" checked={location.monitored} onChange={event => updateLocation(location.id, { monitored: event.target.checked })}/><span><strong>{location.name}</strong><small>{location.address || `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`} · Bengaluru service area</small></span></label>
         <button className="remove-location" type="button" aria-label={`Remove ${location.name}`} onClick={() => { setLocations(current => current.filter(item => item.id !== location.id)); setChecks(current => { const next = { ...current }; delete next[location.id]; return next; }); }}><Trash2 size={16}/> Remove</button>
         {checks[location.id]?.error && <small role="alert" className="alerts-location-error">Forecast unavailable: {checks[location.id].error}</small>}
         {checks[location.id]?.stale && <small role="status" className="alerts-location-warning">Forecast response is stale (over 1 hour old); no alert was generated from it.</small>}

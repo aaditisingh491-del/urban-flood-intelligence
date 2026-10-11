@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import AuthModal from './AuthModal';
-import { confirmSignIn, fetchUserAttributes, getCurrentUser, signIn } from 'aws-amplify/auth';
+import { confirmSignIn, confirmSignUp, fetchUserAttributes, getCurrentUser, signIn, signUp } from 'aws-amplify/auth';
 
 vi.mock('aws-amplify/auth', () => ({
   signIn: vi.fn(), signUp: vi.fn(), signOut: vi.fn(), confirmSignUp: vi.fn(), confirmSignIn: vi.fn(),
@@ -10,7 +10,6 @@ vi.mock('aws-amplify/auth', () => ({
 vi.mock('./cognito', () => ({
   cognitoConfigurationError: null,
   cognitoIsConfigured: true,
-  cognitoSelfSignUpEnabled: false,
 }));
 
 const onClose = vi.fn();
@@ -67,9 +66,40 @@ describe('Cognito direct Auth sign-in', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('does not offer self-registration unless explicitly enabled for the existing pool', () => {
+  it('offers public registration from the existing Cognito pool and confirms before sign-in', async () => {
+    vi.mocked(signUp).mockResolvedValueOnce({ isSignUpComplete: false, nextStep: { signUpStep: 'CONFIRM_SIGN_UP' } } as never);
+    vi.mocked(confirmSignUp).mockResolvedValueOnce({ isSignUpComplete: true, nextStep: { signUpStep: 'DONE' } } as never);
+    vi.mocked(signIn).mockResolvedValueOnce({ isSignedIn: true, nextStep: { signInStep: 'DONE' } } as never);
+    vi.mocked(getCurrentUser).mockResolvedValueOnce({ username: 'member_07' } as never);
+    vi.mocked(fetchUserAttributes).mockResolvedValueOnce({ given_name: 'Member', email: 'member@example.test' } as never);
     renderLogin();
-    expect(screen.queryByRole('button', { name: 'Create an account' })).not.toBeInTheDocument();
-    expect(screen.getByText('Self-registration is not enabled for this app.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Create an account' }));
+    fireEvent.change(screen.getByLabelText('Username / User ID'), { target: { value: 'member_07' } });
+    fireEvent.change(screen.getByLabelText('First name'), { target: { value: 'Member' } });
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'member@example.test' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Valid-password-123!' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    expect(await screen.findByRole('heading', { name: 'Verify your email' })).toBeInTheDocument();
+    expect(signUp).toHaveBeenCalledWith(expect.objectContaining({ username: 'member_07', options: expect.objectContaining({ userAttributes: expect.objectContaining({ email: 'member@example.test' }) }) }));
+    fireEvent.change(screen.getByLabelText('Verification code'), { target: { value: '246810' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Verify email' }));
+    expect(await screen.findByText(/verified successfully/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Sign in' }).some(button => button.getAttribute('type') === 'submit' && !button.hasAttribute('disabled'))).toBe(true));
+    fireEvent.change(screen.getByLabelText('Username or email'), { target: { value: 'member@example.test' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Valid-password-123!' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Sign in' }).find(button => button.getAttribute('type') === 'submit')!);
+    await waitFor(() => expect(onSignedIn).toHaveBeenCalledWith({ username: 'member_07', firstName: 'Member', email: 'member@example.test' }));
+  });
+
+  it('explains when the existing Cognito pool disallows public sign-up', async () => {
+    vi.mocked(signUp).mockRejectedValueOnce(Object.assign(new Error('SignUp is not permitted for this user pool'), { name: 'NotAuthorizedException' }));
+    renderLogin();
+    fireEvent.click(screen.getByRole('button', { name: 'Create an account' }));
+    fireEvent.change(screen.getByLabelText('Username / User ID'), { target: { value: 'member_07' } });
+    fireEvent.change(screen.getByLabelText('First name'), { target: { value: 'Member' } });
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'member@example.test' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Valid-password-123!' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/disabled in this Cognito User Pool/i);
   });
 });

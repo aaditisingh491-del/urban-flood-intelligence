@@ -11,7 +11,7 @@ import {
   getCurrentUser,
   fetchUserAttributes,
 } from 'aws-amplify/auth';
-import { cognitoConfigurationError, cognitoIsConfigured, cognitoSelfSignUpEnabled } from './cognito';
+import { cognitoConfigurationError, cognitoIsConfigured } from './cognito';
 
 type AuthModalProps = {
   onClose: () => void;
@@ -56,6 +56,10 @@ export default function AuthModal({
       switch (err.name) {
         case 'UsernameExistsException':
           return 'This username or email is already registered. Please sign in or use different details.';
+        case 'InvalidParameterException':
+          return 'Some account details are invalid. Check the email address and required fields, then try again.';
+        case 'OperationNotEnabledException':
+          return 'Account creation is disabled in this Cognito User Pool. Ask the administrator to enable self-service sign-up in Cognito.';
         case 'InvalidPasswordException':
           return 'Your password does not meet the required password policy.';
         case 'CodeMismatchException':
@@ -90,10 +94,6 @@ export default function AuthModal({
       setError(cognitoConfigurationError || 'Cognito sign-in is not configured.');
       return;
     }
-    if (mode === 'signup' && !cognitoSelfSignUpEnabled) {
-      setError('Self-registration is disabled in this app configuration. Sign in with an existing account or contact the app administrator.');
-      return;
-    }
     setBusy(true);
 
     try {
@@ -104,6 +104,10 @@ export default function AuthModal({
 
         if (!cleanUsername || !cleanFirstName || !cleanEmail) {
           setError('Please complete all required fields.');
+          return;
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+          setError('Enter a valid email address to create your account.');
           return;
         }
 
@@ -180,7 +184,11 @@ export default function AuthModal({
         }
       }
     } catch (err) {
-      setError(getFriendlyError(err));
+      if (mode === 'signup' && err instanceof Error
+        && (err.name === 'NotAuthorizedException' || err.name === 'OperationNotEnabledException')
+        && /sign.?up|registration|not permitted|not enabled/i.test(err.message)) {
+        setError('Account creation is disabled in this Cognito User Pool. Ask the administrator to enable self-service sign-up in Cognito.');
+      } else setError(getFriendlyError(err));
     } finally {
       setBusy(false);
     }
@@ -449,7 +457,7 @@ export default function AuthModal({
                     Sign in
                   </button>
                 </>
-              ) : cognitoSelfSignUpEnabled ? (
+              ) : (
                 <>
                   New to the platform?{' '}
                   <button
@@ -462,8 +470,6 @@ export default function AuthModal({
                     Create an account
                   </button>
                 </>
-              ) : (
-                <span>Self-registration is not enabled for this app.</span>
               )}
             </div>
           </>

@@ -16,7 +16,6 @@ describe('Amplify Cognito initialization', () => {
     const auth = await import('./cognito');
     await import('./cognito');
     expect(auth.cognitoIsConfigured).toBe(true);
-    expect(auth.cognitoSelfSignUpEnabled).toBe(false);
     expect(configure).toHaveBeenCalledTimes(1);
     expect(configure).toHaveBeenCalledWith({
       Auth: { Cognito: {

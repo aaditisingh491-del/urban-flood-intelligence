@@ -24,7 +24,7 @@ describe('Cognito sign-in navigation', () => {
     expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
-    expect(screen.queryByRole('button', { name: 'Create an account' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create an account' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
     expect(screen.getByText('FloodSense home')).toBeInTheDocument();
   });

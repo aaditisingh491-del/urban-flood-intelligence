@@ -282,6 +282,14 @@ client secrets, or other private credentials in them**.
 
 Restart the frontend after changing environment variables.
 
+### Public account registration
+
+The sign-in page uses the existing Amazon Cognito User Pool through Amplify v6. It now offers **Create an account** and uses Cognito `SignUp` and `ConfirmSignUp`; email confirmation remains controlled by the existing pool configuration. This repository has no CDK, CloudFormation, Terraform, or other Cognito infrastructure definition, so a frontend change cannot turn on registration in the live pool.
+
+If Cognito responds that sign-up is not permitted, an administrator must enable it in the existing pool: open **Amazon Cognito → User Pools → the existing pool → Sign-up → Self-service sign-up → Edit**, select **Enable self-registration**, and save. Keep the pool's verification/confirmation settings and app client unchanged. AWS warns that this allows anyone with access to the public app client to attempt registration, so enable it only if public sign-up is intended. Cognito must also have a working email verification method for code confirmation. AWS's instructions are in [Allow self-service sign-up](https://docs.aws.amazon.com/cognito/latest/developerguide/how-to-create-user-accounts.html).
+
+No AWS resource was changed by this repository update. After the pool setting is enabled, restart/redeploy the frontend and test sign-up, email confirmation, and sign-in using a new test address.
+
 ### Backend
 
 Backend settings are supplied through environment variables or the
